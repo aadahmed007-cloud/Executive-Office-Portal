@@ -244,12 +244,14 @@ export interface Notification {
   created_at: string;
 }
 
+export type ActionType = 'CREATE' | 'UPDATE' | 'DELETE' | 'DECIDE' | 'ROUTING' | 'EXPORT' | 'AUTH';
+
 export interface AuditLogEntry {
   id: string;
   user_id: string;
   user_name: string;
   user_role: RoleType;
-  action_type: 'CREATE' | 'UPDATE' | 'DELETE' | 'DECIDE' | 'ROUTING' | 'EXPORT' | 'AUTH';
+  action_type: ActionType;
   entity_type: string;
   entity_id: string;
   before_value?: string | null;

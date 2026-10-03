@@ -3,10 +3,10 @@ import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../../i18n/i18nContext';
 import {
   directiveRepo,
-  auditRepo,
   matterRepo,
   notificationRepo
 } from '../../data/sqlite/repositories';
+import { AuditLogger } from '../../domain/security/auditLogger';
 import { Directive, Matter } from '../../domain/types';
 import { analyzeOverdue } from '../../domain/rules/overdueLogic';
 import { maskConfidentialDirective } from '../../domain/rules/confidentiality';
@@ -89,17 +89,7 @@ export const DirectivesView: React.FC = () => {
       created_by: currentUser.name
     });
 
-    await auditRepo.log({
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
-      action_type: 'CREATE',
-      entity_type: 'DIRECTIVE',
-      entity_id: created.id,
-      before_value: null,
-      after_value: `إصدار تكليف رئاسي جديد: ${created.code} - ${created.title} (المكلف: ${created.assigned_person})`,
-      ip_address: '10.120.4.x (LAN)'
-    });
+    await AuditLogger.logDirectiveCreation(currentUser, created);
 
     await notificationRepo.create({
       recipient_role: 'SECRETARY',

@@ -3,10 +3,10 @@ import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../../i18n/i18nContext';
 import {
   directiveRepo,
-  auditRepo,
   matterRepo,
   notificationRepo
 } from '../../data/sqlite/repositories';
+import { AuditLogger } from '../../domain/security/auditLogger';
 import { Directive, DirectiveUpdate, Matter } from '../../domain/types';
 import { analyzeOverdue } from '../../domain/rules/overdueLogic';
 import {
@@ -25,7 +25,10 @@ import {
   FolderGit2,
   Percent,
   FileText,
-  ShieldCheck
+  ShieldCheck,
+  Trash2,
+  Edit3,
+  Save
 } from 'lucide-react';
 
 interface DirectiveDetailModalProps {
@@ -44,13 +47,21 @@ export const DirectiveDetailModal: React.FC<DirectiveDetailModalProps> = ({
   const { currentUser } = useAuth();
   const { t, formatNumber, formatDate } = useI18n();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'progress_log' | 'print'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'progress_log' | 'edit' | 'print'>('overview');
   const [updates, setUpdates] = useState<DirectiveUpdate[]>([]);
   const [linkedMatter, setLinkedMatter] = useState<Matter | null>(null);
 
   // New Update Form State
   const [newProgress, setNewProgress] = useState(directive.progress_percent);
   const [updateNotes, setUpdateNotes] = useState('');
+
+  // Edit Mode State
+  const [editTitle, setEditTitle] = useState(directive.title);
+  const [editInstruction, setEditInstruction] = useState(directive.instruction);
+  const [editDept, setEditDept] = useState(directive.assigned_department);
+  const [editPerson, setEditPerson] = useState(directive.assigned_person);
+  const [editDueDate, setEditDueDate] = useState(directive.due_date);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const overdue = analyzeOverdue(directive.due_date, directive.status);
   const isCompleted = directive.status === 'completed' || directive.status === 'closed';
@@ -67,6 +78,11 @@ export const DirectiveDetailModal: React.FC<DirectiveDetailModalProps> = ({
     if (isOpen) {
       loadData();
       setNewProgress(directive.progress_percent);
+      setEditTitle(directive.title);
+      setEditInstruction(directive.instruction);
+      setEditDept(directive.assigned_department);
+      setEditPerson(directive.assigned_person);
+      setEditDueDate(directive.due_date);
     }
   }, [isOpen, directive.id]);
 
@@ -91,22 +107,18 @@ export const DirectiveDetailModal: React.FC<DirectiveDetailModalProps> = ({
       });
     }
 
-    await auditRepo.log({
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
-      action_type: 'UPDATE',
-      entity_type: 'DIRECTIVE',
-      entity_id: directive.id,
-      before_value: `نسبة الإنجاز السابقة: ${directive.progress_percent}%`,
-      after_value: `تسجيل تقرير متابعة: ${newProgress}% (${updateNotes})`,
-      ip_address: '10.120.4.x (LAN)'
-    });
+    // Secure Audit Log
+    await AuditLogger.logDirectiveProgress(
+      currentUser,
+      directive,
+      newProgress,
+      updateNotes
+    );
 
     setUpdateNotes('');
     await loadData();
     onUpdated();
-    alert('تم حفظ تقرير المتابعة وتحديث مؤشر الإنجاز بنجاح.');
+    alert('تم حفظ تقرير المتابعة وتوثيق العملية في سجل الرقابة المحلي بنجاح.');
   };
 
   const handleCloseDirective = async () => {
@@ -117,20 +129,65 @@ export const DirectiveDetailModal: React.FC<DirectiveDetailModalProps> = ({
       progress_percent: 100
     });
 
-    await auditRepo.log({
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
-      action_type: 'UPDATE',
-      entity_type: 'DIRECTIVE',
-      entity_id: directive.id,
-      before_value: `الحالة: ${directive.status}`,
-      after_value: 'إغلاق واعتماد استيفاء التكليف الرئاسي نهائياً',
-      ip_address: '10.120.4.x (LAN)'
-    });
+    // Secure Audit Log
+    await AuditLogger.logDirectiveClosure(currentUser, directive);
 
     onUpdated();
     onClose();
+  };
+
+  const handleDeleteDirective = async () => {
+    const reason = window.prompt('يرجى كتابة سبب حذف/أرشفة هذا التكليف الرئاسي لتوثيقه في سجل الرقابة:');
+    if (reason === null) return;
+
+    await directiveRepo.softDelete(directive.id);
+
+    // Secure Audit Log
+    await AuditLogger.logDirectiveDeletion(currentUser, directive, reason || 'حذف بواسطة المستخدم');
+
+    onUpdated();
+    onClose();
+    alert('تم حذف التكليف وتوثيق القيد في سجل الرقابة بنجاح.');
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingEdit(true);
+    try {
+      const beforeState = {
+        title: directive.title,
+        status: directive.status,
+        progress: directive.progress_percent
+      };
+
+      await directiveRepo.update(directive.id, {
+        title: editTitle,
+        instruction: editInstruction,
+        assigned_department: editDept,
+        assigned_person: editPerson,
+        due_date: editDueDate
+      });
+
+      // Secure Audit Log
+      await AuditLogger.logDirectiveUpdate(
+        currentUser,
+        directive.id,
+        beforeState,
+        {
+          title: editTitle,
+          status: directive.status,
+          progress: directive.progress_percent,
+          reason: 'تعديل البيانات الأساسية للتكليف'
+        }
+      );
+
+      await loadData();
+      onUpdated();
+      setActiveTab('overview');
+      alert('تم تحديث بيانات التكليف وتوثيق التغيير في سجل الرقابة.');
+    } finally {
+      setIsSavingEdit(false);
+    }
   };
 
   return (
@@ -204,12 +261,14 @@ export const DirectiveDetailModal: React.FC<DirectiveDetailModalProps> = ({
             <span className="font-bold text-slate-900 text-sm">{formatNumber(directive.progress_percent)}%</span>
           </div>
 
-          {linkedMatter && (
-            <div className="flex items-center gap-1 text-[11px] text-purple-900 font-bold bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200">
-              <FolderGit2 className="w-3.5 h-3.5 text-purple-700" />
-              <span>القضية: {linkedMatter.code} — {linkedMatter.title}</span>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {linkedMatter && (
+              <div className="flex items-center gap-1 text-[11px] text-purple-900 font-bold bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200">
+                <FolderGit2 className="w-3.5 h-3.5 text-purple-700" />
+                <span>القضية: {linkedMatter.code} — {linkedMatter.title}</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Tabs Bar */}
@@ -217,6 +276,7 @@ export const DirectiveDetailModal: React.FC<DirectiveDetailModalProps> = ({
           {[
             { id: 'overview', label: t('directives_module.tab_overview') },
             { id: 'progress_log', label: t('directives_module.tab_progress_log'), count: updates.length },
+            { id: 'edit', label: 'تعديل التكليف' },
             { id: 'print', label: t('directives_module.tab_print') }
           ].map((tab) => (
             <button
@@ -264,23 +324,32 @@ export const DirectiveDetailModal: React.FC<DirectiveDetailModalProps> = ({
                 </div>
               </div>
 
-              {/* Close Directive Button */}
-              {isCompleted ? (
-                <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-xl text-xs text-emerald-800 font-bold flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  <span>{t('directives_module.directive_closed_badge')}</span>
-                </div>
-              ) : (
-                <div className="pt-2 flex justify-end">
+              {/* Action Buttons: Close or Delete */}
+              <div className="pt-2 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+                <button
+                  type="button"
+                  onClick={handleDeleteDirective}
+                  className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold border border-rose-200 flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>حذف وأرشفة التكليف</span>
+                </button>
+
+                {isCompleted ? (
+                  <div className="p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl text-xs text-emerald-800 font-bold flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span>{t('directives_module.directive_closed_badge')}</span>
+                  </div>
+                ) : (
                   <button
                     onClick={handleCloseDirective}
-                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition flex items-center gap-2 cursor-pointer"
+                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow"
                   >
                     <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                     <span>{t('directives_module.close_directive_btn')}</span>
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )}
 
@@ -350,13 +419,98 @@ export const DirectiveDetailModal: React.FC<DirectiveDetailModalProps> = ({
                   type="submit"
                   className="py-2 px-4 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition cursor-pointer"
                 >
-                  حفظ تقرير المتابعة
+                  حفظ وتوثيق تقرير المتابعة
                 </button>
               </form>
             </div>
           )}
 
-          {/* TAB 3: PRINT DOCKET (PDF Ready) */}
+          {/* TAB 3: EDIT DIRECTIVE FORM */}
+          {activeTab === 'edit' && (
+            <form onSubmit={handleSaveEdit} className="space-y-4 bg-slate-50 p-5 rounded-2xl border border-slate-200">
+              <h3 className="text-sm font-bold text-slate-900 mb-2 flex items-center gap-2">
+                <Edit3 className="w-4 h-4 text-emerald-700" />
+                <span>تعديل بيانات التكليف الرئاسي (يتم توثيق كل تعديل في سجل الرقابة)</span>
+              </h3>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">موضوع التكليف:</label>
+                <input
+                  type="text"
+                  required
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">نص التعليمات والتوجيه:</label>
+                <textarea
+                  required
+                  rows={3}
+                  value={editInstruction}
+                  onChange={(e) => setEditInstruction(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs text-slate-800"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">القطاع المكلف:</label>
+                  <input
+                    type="text"
+                    required
+                    value={editDept}
+                    onChange={(e) => setEditDept(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs text-slate-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">المسؤول عن التنفيذ:</label>
+                  <input
+                    type="text"
+                    required
+                    value={editPerson}
+                    onChange={(e) => setEditPerson(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs text-slate-800"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">تاريخ الاستحقاق:</label>
+                <input
+                  type="date"
+                  required
+                  value={editDueDate}
+                  onChange={(e) => setEditDueDate(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs text-slate-800 max-w-xs"
+                />
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('overview')}
+                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-xl"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  className="px-5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{isSavingEdit ? 'جاري الحفظ...' : 'حفظ التعديلات وتوثيق القيد'}</span>
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* TAB 4: PRINT DOCKET (PDF Ready) */}
           {activeTab === 'print' && (
             <div className="space-y-4">
               <div className="flex justify-end">

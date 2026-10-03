@@ -9,6 +9,7 @@ import {
   auditRepo,
   notificationRepo
 } from '../../data/sqlite/repositories';
+import { AuditLogger } from '../../domain/security/auditLogger';
 import {
   Meeting,
   Correspondence,
@@ -139,7 +140,7 @@ export const ChairmanDashboard: React.FC<ChairmanDashboardProps> = ({ onNavigate
         });
 
         const nextCode = await directiveRepo.getNextCode();
-        await directiveRepo.create({
+        const createdDirective = await directiveRepo.create({
           code: nextCode,
           title: `تكليف رئاسي بشأن: ${selectedLetter.subject}`,
           instruction: phraseText,
@@ -156,6 +157,8 @@ export const ChairmanDashboard: React.FC<ChairmanDashboardProps> = ({ onNavigate
           matter_id: selectedLetter.matter_id || null,
           created_by: currentUser.name
         });
+
+        await AuditLogger.logDirectiveCreation(currentUser, createdDirective);
       }
 
       await auditRepo.log({

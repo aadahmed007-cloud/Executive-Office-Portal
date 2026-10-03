@@ -7,6 +7,7 @@ import {
   auditRepo,
   notificationRepo
 } from '../../data/sqlite/repositories';
+import { AuditLogger } from '../../domain/security/auditLogger';
 import {
   Meeting,
   MeetingAttendee,
@@ -306,17 +307,7 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
       created_by: currentUser.name
     });
 
-    await auditRepo.log({
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
-      action_type: 'CREATE',
-      entity_type: 'DIRECTIVE',
-      entity_id: createdDirective.id,
-      before_value: `قرار اجتماع رقم ${decision.order_index}`,
-      after_value: `توليد تكليف رسمي ${createdDirective.code} للجهة: ${decision.assigned_to_name}`,
-      ip_address: '10.120.4.x (LAN)'
-    });
+    await AuditLogger.logDirectiveCreation(currentUser, createdDirective);
 
     await loadDetails();
     alert(`تم تحويل القرار بنجاح إلى التكليف الرئاسي الرسمي رقم ${createdDirective.code}.`);
