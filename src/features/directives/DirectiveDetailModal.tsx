@@ -6,6 +6,7 @@ import {
   matterRepo,
   notificationRepo
 } from '../../data/sqlite/repositories';
+import { CommandService } from '../../domain/services/commandService';
 import { AuditLogger } from '../../domain/security/auditLogger';
 import { Directive, DirectiveUpdate, Matter } from '../../domain/types';
 import { analyzeOverdue } from '../../domain/rules/overdueLogic';
@@ -63,6 +64,7 @@ export const DirectiveDetailModal: React.FC<DirectiveDetailModalProps> = ({
   const [editPerson, setEditPerson] = useState(directive.assigned_person);
   const [editDueDate, setEditDueDate] = useState(directive.due_date);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
   const overdue = analyzeOverdue(directive.due_date, directive.status);
   const isCompleted = directive.status === 'completed' || directive.status === 'closed';
@@ -116,99 +118,59 @@ export const DirectiveDetailModal: React.FC<DirectiveDetailModalProps> = ({
     e.preventDefault();
     if (!updateNotes) return;
 
-    await directiveRepo.addUpdate({
+    await CommandService.addDirectiveUpdate({
       directive_id: directive.id,
       notes: updateNotes,
       progress_percent: newProgress,
       updated_by: currentUser.name
-    });
+    }, currentUser);
 
     const isNowDone = newProgress >= 100;
     if (isNowDone && directive.status !== 'completed' && directive.status !== 'closed') {
-      await directiveRepo.update(directive.id, {
+      await CommandService.updateDirective(directive.id, {
         status: 'completed',
         progress_percent: 100
-      });
+      }, currentUser);
     }
-
-    // Secure Audit Log
-    await AuditLogger.logDirectiveProgress(
-      currentUser,
-      directive,
-      newProgress,
-      updateNotes
-    );
 
     setUpdateNotes('');
     await loadData();
     onUpdated();
-    alert('تم حفظ تقرير المتابعة وتوثيق العملية في سجل الرقابة المحلي بنجاح.');
+    setActionFeedback('تم حفظ تقرير المتابعة وتوثيق العملية في سجل الرقابة المحلي بنجاح.');
   };
 
   const handleCloseDirective = async () => {
-    if (!window.confirm('هل ترغب في إغلاق واعتماد استيفاء هذا التكليف نهائياً؟')) return;
-
-    await directiveRepo.update(directive.id, {
+    await CommandService.updateDirective(directive.id, {
       status: 'closed',
       progress_percent: 100
-    });
-
-    // Secure Audit Log
-    await AuditLogger.logDirectiveClosure(currentUser, directive);
+    }, currentUser);
 
     onUpdated();
     onClose();
   };
 
   const handleDeleteDirective = async () => {
-    const reason = window.prompt('يرجى كتابة سبب حذف/أرشفة هذا التكليف الرئاسي لتوثيقه في سجل الرقابة:');
-    if (reason === null) return;
-
-    await directiveRepo.softDelete(directive.id);
-
-    // Secure Audit Log
-    await AuditLogger.logDirectiveDeletion(currentUser, directive, reason || 'حذف بواسطة المستخدم');
-
+    await CommandService.softDeleteDirective(directive.id, currentUser);
     onUpdated();
     onClose();
-    alert('تم حذف التكليف وتوثيق القيد في سجل الرقابة بنجاح.');
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingEdit(true);
     try {
-      const beforeState = {
-        title: directive.title,
-        status: directive.status,
-        progress: directive.progress_percent
-      };
-
-      await directiveRepo.update(directive.id, {
+      await CommandService.updateDirective(directive.id, {
         title: editTitle,
         instruction: editInstruction,
         assigned_department: editDept,
         assigned_person: editPerson,
         due_date: editDueDate
-      });
-
-      // Secure Audit Log
-      await AuditLogger.logDirectiveUpdate(
-        currentUser,
-        directive.id,
-        beforeState,
-        {
-          title: editTitle,
-          status: directive.status,
-          progress: directive.progress_percent,
-          reason: 'تعديل البيانات الأساسية للتكليف'
-        }
-      );
+      }, currentUser);
 
       await loadData();
       onUpdated();
       setActiveTab('overview');
-      alert('تم تحديث بيانات التكليف وتوثيق التغيير في سجل الرقابة.');
+      setActionFeedback('تم تحديث بيانات التكليف وتوثيق التغيير في سجل الرقابة.');
     } finally {
       setIsSavingEdit(false);
     }
@@ -226,9 +188,9 @@ export const DirectiveDetailModal: React.FC<DirectiveDetailModalProps> = ({
               </span>
               <span className="px-2.5 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-amber-300">
                 {directive.source_type === 'correspondence'
-                  ? 'منبثق عن مكاتبة'
+                  ? 'منبثق عن مكاتبة رسمية'
                   : directive.source_type === 'meeting'
-                  ? 'منبثق عن اجتماع'
+                  ? 'منبثق عن جلسة اجتماع'
                   : 'توجيه رئاسي مباشر'}
               </span>
               {overdue.isOverdue && !isCompleted && (
@@ -269,6 +231,22 @@ export const DirectiveDetailModal: React.FC<DirectiveDetailModalProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Action Feedback Toast */}
+        {actionFeedback && (
+          <div className="bg-emerald-50 border-b border-emerald-200 px-5 py-2.5 flex items-center justify-between text-xs text-emerald-800">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+              <span className="font-semibold">{actionFeedback}</span>
+            </div>
+            <button
+              onClick={() => setActionFeedback(null)}
+              className="text-emerald-600 hover:text-emerald-900 text-sm font-bold cursor-pointer"
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* Progress & Status Ribbon */}
         <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4 text-xs">

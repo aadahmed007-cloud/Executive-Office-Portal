@@ -221,5 +221,84 @@ export async function runAccessControlRepositoryTests(): Promise<boolean> {
     );
   }
 
+  // 8. Mutation Security Test: Secretary trying to record Chairman approval must be rejected
+  let approvalBlocked = false;
+  try {
+    await correspondenceRepo.recordApproval({
+      correspondence_id: 'corr-in-001',
+      decision_type: 'approved',
+      standard_phrase: 'تأشيرة غير مصرح بها',
+      decided_at: new Date().toISOString(),
+      decided_by_name: 'دخيل'
+    }, { role: 'SECRETARY', userId: 'usr-sec-01', can_view_confidential: true }); // Role is not CHAIRMAN
+  } catch (err: any) {
+    if (err.name === 'SecurityAuthorizationError') {
+      approvalBlocked = true;
+    }
+  }
+  console.assert(
+    approvalBlocked === true,
+    'Repo Test 8 Failed: Non-Chairman role must be rejected with SecurityAuthorizationError on recordApproval'
+  );
+
+  // 8b. Chairman recording approval must succeed
+  let chairmanApprovalSucceeded = false;
+  try {
+    const appr = await correspondenceRepo.recordApproval({
+      correspondence_id: 'corr-in-001',
+      decision_type: 'approved',
+      standard_phrase: 'موافق ومعتمد للتنفيذ',
+      decided_at: new Date().toISOString(),
+      decided_by_name: 'رئيس مجلس الإدارة'
+    }, { role: 'CHAIRMAN', userId: 'usr-chairman-01', can_view_confidential: true });
+    if (appr && appr.decision_type === 'approved') {
+      chairmanApprovalSucceeded = true;
+    }
+  } catch {}
+  console.assert(
+    chairmanApprovalSucceeded === true,
+    'Repo Test 8b Failed: Chairman must successfully record approval'
+  );
+
+  // 9. Mutation Security Test: Unauthorized user trying to create confidential correspondence must be rejected
+  let confidentialCreateBlocked = false;
+  try {
+    await correspondenceRepo.create({
+      serial_number: 'IN-TEST-CONF',
+      type: 'incoming',
+      date: '2026-10-04',
+      source_or_dest_entity: 'كيان اختبار',
+      subject: 'موضوع سري للغاية غير مصرح به',
+      priority: 'urgent',
+      confidentiality: 'top_secret',
+      summary: 'ملخص تجربة',
+      status: 'registered',
+      matter_id: null,
+      created_by: 'دخيل'
+    }, unauthorizedCtx); // can_view_confidential is false
+  } catch (err: any) {
+    if (err.name === 'SecurityAuthorizationError') {
+      confidentialCreateBlocked = true;
+    }
+  }
+  console.assert(
+    confidentialCreateBlocked === true,
+    'Repo Test 9 Failed: Creating confidential correspondence without clearance must throw SecurityAuthorizationError'
+  );
+
+  // 10. Mutation Security Test: Anonymous softDelete without userId must be rejected
+  let anonymousDeleteBlocked = false;
+  try {
+    await correspondenceRepo.softDelete('corr-in-001', {}); // No userId
+  } catch (err: any) {
+    if (err.name === 'SecurityAuthorizationError') {
+      anonymousDeleteBlocked = true;
+    }
+  }
+  console.assert(
+    anonymousDeleteBlocked === true,
+    'Repo Test 10 Failed: Anonymous softDelete without session userId must throw SecurityAuthorizationError'
+  );
+
   return true;
 }

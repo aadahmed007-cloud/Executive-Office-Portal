@@ -28,23 +28,30 @@ export interface UserContext {
   can_view_confidential?: boolean;
 }
 
+export class SecurityAuthorizationError extends Error {
+  constructor(message: string = 'غير مصرح بتنفيذ هذا الإجراء (Access Denied: Unauthorized action)') {
+    super(message);
+    this.name = 'SecurityAuthorizationError';
+  }
+}
+
 export interface IMeetingRepository {
   getAll(
     filter?: { status?: string; matterId?: string; date?: string; search?: string },
     userContext?: UserContext
   ): Promise<Meeting[]>;
   getById(id: string, userContext?: UserContext): Promise<Meeting | null>;
-  create(meeting: Omit<Meeting, 'id' | 'created_at' | 'updated_at'>): Promise<Meeting>;
-  update(id: string, meeting: Partial<Meeting>): Promise<Meeting>;
-  softDelete(id: string): Promise<boolean>;
+  create(meeting: Omit<Meeting, 'id' | 'created_at' | 'updated_at'>, userContext?: UserContext): Promise<Meeting>;
+  update(id: string, meeting: Partial<Meeting>, userContext?: UserContext): Promise<Meeting>;
+  softDelete(id: string, userContext?: UserContext): Promise<boolean>;
   getAttendees(meetingId: string, userContext?: UserContext): Promise<MeetingAttendee[]>;
-  setAttendees(meetingId: string, attendees: Omit<MeetingAttendee, 'id' | 'meeting_id'>[]): Promise<void>;
+  setAttendees(meetingId: string, attendees: Omit<MeetingAttendee, 'id' | 'meeting_id'>[], userContext?: UserContext): Promise<void>;
   getAgenda(meetingId: string, userContext?: UserContext): Promise<AgendaItem[]>;
-  setAgenda(meetingId: string, items: Omit<AgendaItem, 'id' | 'meeting_id'>[]): Promise<void>;
+  setAgenda(meetingId: string, items: Omit<AgendaItem, 'id' | 'meeting_id'>[], userContext?: UserContext): Promise<void>;
   getMinutes(meetingId: string, userContext?: UserContext): Promise<MeetingMinutes | null>;
-  saveMinutes(minutes: Omit<MeetingMinutes, 'id'>): Promise<MeetingMinutes>;
+  saveMinutes(minutes: Omit<MeetingMinutes, 'id'>, userContext?: UserContext): Promise<MeetingMinutes>;
   getDecisions(meetingId: string, userContext?: UserContext): Promise<Decision[]>;
-  addDecision(decision: Omit<Decision, 'id'>): Promise<Decision>;
+  addDecision(decision: Omit<Decision, 'id'>, userContext?: UserContext): Promise<Decision>;
 }
 
 export interface ICorrespondenceRepository {
@@ -54,17 +61,17 @@ export interface ICorrespondenceRepository {
   ): Promise<Correspondence[]>;
   getById(id: string, userContext?: UserContext): Promise<Correspondence | null>;
   getBySerial(serial: string, userContext?: UserContext): Promise<Correspondence | null>;
-  create(item: Omit<Correspondence, 'id' | 'created_at' | 'updated_at'>): Promise<Correspondence>;
-  update(id: string, item: Partial<Correspondence>): Promise<Correspondence>;
-  softDelete(id: string): Promise<boolean>;
+  create(item: Omit<Correspondence, 'id' | 'created_at' | 'updated_at'>, userContext?: UserContext): Promise<Correspondence>;
+  update(id: string, item: Partial<Correspondence>, userContext?: UserContext): Promise<Correspondence>;
+  softDelete(id: string, userContext?: UserContext): Promise<boolean>;
   getBriefingNote(correspondenceId: string, userContext?: UserContext): Promise<BriefingNote | null>;
-  saveBriefingNote(note: Omit<BriefingNote, 'id'>): Promise<BriefingNote>;
+  saveBriefingNote(note: Omit<BriefingNote, 'id'>, userContext?: UserContext): Promise<BriefingNote>;
   getApproval(correspondenceId: string, userContext?: UserContext): Promise<Approval | null>;
-  recordApproval(approval: Omit<Approval, 'id'>): Promise<Approval>;
+  recordApproval(approval: Omit<Approval, 'id'>, userContext?: UserContext): Promise<Approval>;
   getRoutings(correspondenceId: string, userContext?: UserContext): Promise<CorrespondenceRouting[]>;
-  addRouting(routing: Omit<CorrespondenceRouting, 'id'>): Promise<CorrespondenceRouting>;
+  addRouting(routing: Omit<CorrespondenceRouting, 'id'>, userContext?: UserContext): Promise<CorrespondenceRouting>;
   getAttachments(correspondenceId: string, userContext?: UserContext): Promise<Attachment[]>;
-  addAttachment(att: Omit<Attachment, 'id'>): Promise<Attachment>;
+  addAttachment(att: Omit<Attachment, 'id'>, userContext?: UserContext): Promise<Attachment>;
   getNextSerial(type: 'incoming' | 'outgoing', year?: number): Promise<string>;
 }
 
@@ -74,40 +81,40 @@ export interface IDirectiveRepository {
     userContext?: UserContext
   ): Promise<Directive[]>;
   getById(id: string, userContext?: UserContext): Promise<Directive | null>;
-  create(directive: Omit<Directive, 'id' | 'created_at' | 'updated_at'>): Promise<Directive>;
-  update(id: string, directive: Partial<Directive>): Promise<Directive>;
-  softDelete(id: string): Promise<boolean>;
+  create(directive: Omit<Directive, 'id' | 'created_at' | 'updated_at'>, userContext?: UserContext): Promise<Directive>;
+  update(id: string, directive: Partial<Directive>, userContext?: UserContext): Promise<Directive>;
+  softDelete(id: string, userContext?: UserContext): Promise<boolean>;
   getUpdates(directiveId: string, userContext?: UserContext): Promise<DirectiveUpdate[]>;
-  addUpdate(update: Omit<DirectiveUpdate, 'id' | 'created_at'>): Promise<DirectiveUpdate>;
+  addUpdate(update: Omit<DirectiveUpdate, 'id' | 'created_at'>, userContext?: UserContext): Promise<DirectiveUpdate>;
   getNextCode(year?: number): Promise<string>;
 }
 
 export interface IMatterRepository {
   getAll(filter?: { status?: string; search?: string }, userContext?: UserContext): Promise<Matter[]>;
   getById(id: string, userContext?: UserContext): Promise<Matter | null>;
-  create(matter: Omit<Matter, 'id' | 'created_at' | 'updated_at'>): Promise<Matter>;
-  update(id: string, matter: Partial<Matter>): Promise<Matter>;
-  softDelete(id: string): Promise<boolean>;
+  create(matter: Omit<Matter, 'id' | 'created_at' | 'updated_at'>, userContext?: UserContext): Promise<Matter>;
+  update(id: string, matter: Partial<Matter>, userContext?: UserContext): Promise<Matter>;
+  softDelete(id: string, userContext?: UserContext): Promise<boolean>;
   getLinks(matterId: string, userContext?: UserContext): Promise<MatterLink[]>;
-  addLink(link: Omit<MatterLink, 'id' | 'created_at'>): Promise<MatterLink>;
-  removeLink(linkId: string): Promise<boolean>;
+  addLink(link: Omit<MatterLink, 'id' | 'created_at'>, userContext?: UserContext): Promise<MatterLink>;
+  removeLink(linkId: string, userContext?: UserContext): Promise<boolean>;
 }
 
 export interface IContactRepository {
   getAll(): Promise<Contact[]>;
   getById(id: string): Promise<Contact | null>;
-  create(contact: Omit<Contact, 'id' | 'created_at'>): Promise<Contact>;
-  update(id: string, contact: Partial<Contact>): Promise<Contact>;
-  softDelete(id: string): Promise<boolean>;
+  create(contact: Omit<Contact, 'id' | 'created_at'>, userContext?: UserContext): Promise<Contact>;
+  update(id: string, contact: Partial<Contact>, userContext?: UserContext): Promise<Contact>;
+  softDelete(id: string, userContext?: UserContext): Promise<boolean>;
   getInteractions(contactId: string): Promise<Interaction[]>;
-  addInteraction(interaction: Omit<Interaction, 'id'>): Promise<Interaction>;
+  addInteraction(interaction: Omit<Interaction, 'id'>, userContext?: UserContext): Promise<Interaction>;
 }
 
 export interface INotificationRepository {
   getAllForRole(role: RoleType, userContext?: UserContext): Promise<Notification[]>;
-  create(notification: Omit<Notification, 'id' | 'created_at'>): Promise<Notification>;
-  markAsRead(id: string): Promise<void>;
-  markAllAsRead(role: RoleType): Promise<void>;
+  create(notification: Omit<Notification, 'id' | 'created_at'>, userContext?: UserContext): Promise<Notification>;
+  markAsRead(id: string, userContext?: UserContext): Promise<void>;
+  markAllAsRead(role: RoleType, userContext?: UserContext): Promise<void>;
 }
 
 export interface IAuditRepository {

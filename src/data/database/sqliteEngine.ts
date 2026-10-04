@@ -4,7 +4,6 @@
  */
 
 import initSqlJs, { Database, SqlJsStatic } from 'sql.js';
-import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { SCHEMA_SQL } from './schema.sql';
 import {
   INITIAL_USERS,
@@ -33,16 +32,27 @@ class SqliteEngine {
   private SQL: SqlJsStatic | null = null;
   private initPromise: Promise<void> | null = null;
   private isPersisting: boolean = false;
+  private isDirty: boolean = false;
+  private persistTimer: any = null;
 
   public async init(): Promise<void> {
     if (this.db) return;
     if (this.initPromise) return this.initPromise;
 
     this.initPromise = (async () => {
-      // 1. Initialize WASM locally without any external CDN
-      this.SQL = await initSqlJs({
-        locateFile: () => sqlWasmUrl
-      });
+      // 1. Initialize WASM locally without any external CDN (supports both browser and Node.js test runner)
+      let locateFile: (() => string) | undefined = undefined;
+      if (typeof window !== 'undefined') {
+        try {
+          // @ts-ignore
+          const wasmMod = await import('sql.js/dist/sql-wasm.wasm?url');
+          if (wasmMod && wasmMod.default) {
+            locateFile = () => wasmMod.default;
+          }
+        } catch {}
+      }
+
+      this.SQL = await initSqlJs(locateFile ? { locateFile } : undefined);
 
       // 2. Try loading persisted binary from IndexedDB
       const savedBinary = await this.loadFromIndexedDB();
@@ -106,24 +116,44 @@ class SqliteEngine {
     const sanitized = this.sanitizeParams(params);
     db.run(sql, sanitized);
     const changes = db.getRowsModified();
-    // Schedule asynchronous persist without blocking
+    // Mark dirty and schedule asynchronous serialized persistence
+    this.isDirty = true;
     this.schedulePersist();
     return { changes };
   }
 
   /**
-   * Schedule debounced save to IndexedDB
+   * Schedule debounced save to IndexedDB with serialized dirty-queue
    */
   private schedulePersist(): void {
-    if (this.isPersisting) return;
-    this.isPersisting = true;
-    setTimeout(async () => {
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer);
+    }
+    this.persistTimer = setTimeout(async () => {
+      this.persistTimer = null;
+      await this.drainPersistQueue();
+    }, 150);
+  }
+
+  /**
+   * Drains the persistence queue in a serialized loop.
+   * Ensures that no writes occurring during in-flight persistence can be silently lost.
+   */
+  private async drainPersistQueue(): Promise<void> {
+    if (this.isPersisting) {
+      // An operation is already in-flight. isDirty remains true, so it will loop again.
+      return;
+    }
+
+    while (this.isDirty) {
+      this.isDirty = false;
+      this.isPersisting = true;
       try {
         await this.persist();
       } finally {
         this.isPersisting = false;
       }
-    }, 150);
+    }
   }
 
   /**
@@ -139,7 +169,12 @@ class SqliteEngine {
    * Immediate synchronous export and persist for critical presidential transactions
    */
   public async saveImmediate(): Promise<void> {
-    await this.persist();
+    this.isDirty = true;
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer);
+      this.persistTimer = null;
+    }
+    await this.drainPersistQueue();
   }
 
   /**

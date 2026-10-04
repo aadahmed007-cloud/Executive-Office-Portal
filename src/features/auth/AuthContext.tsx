@@ -4,6 +4,19 @@ import { INITIAL_USERS } from '../../data/database/seedData';
 import { auditRepo, userRepo } from '../../data/sqlite/repositories';
 import { verifyPassword, hashPassword } from '../../domain/security/cryptoUtils';
 
+export const GUEST_USER: User = {
+  id: 'guest',
+  username: 'unauthenticated',
+  name: 'مستخدم غير مسجل',
+  title: 'غير مصرح',
+  department_id: '',
+  email: '',
+  role: 'SECRETARY',
+  can_view_confidential: false,
+  must_change_password: false,
+  created_at: ''
+};
+
 interface AuthContextType {
   currentUser: User;
   isAuthenticated: boolean;
@@ -26,15 +39,9 @@ const AuthContext = createContext<AuthContextType | null>(null);
 const DEFAULT_TIMEOUT_MINS = 15;
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Start with Secretary as authenticated user in prototype
-  const [currentUser, setCurrentUser] = useState<User>(() => ({
-    ...INITIAL_USERS[1],
-    can_view_confidential: Boolean(INITIAL_USERS[1].can_view_confidential),
-    role: INITIAL_USERS[1].role as RoleType,
-    must_change_password: Boolean(INITIAL_USERS[1].must_change_password)
-  }));
-
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  // Production Security: Initial state must be unauthenticated. No auto-login!
+  const [currentUser, setCurrentUser] = useState<User>(GUEST_USER);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLocked, setIsLocked] = useState<boolean>(false);
   const [sessionTimeoutMinutes, setSessionTimeoutMinutesState] = useState<number>(DEFAULT_TIMEOUT_MINS);
   const [inactivitySecondsRemaining, setInactivitySecondsRemaining] = useState<number>(DEFAULT_TIMEOUT_MINS * 60);
@@ -82,17 +89,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (remaining <= 0) {
         setIsLocked(true);
-        auditRepo.log({
-          user_id: currentUser.id,
-          user_name: currentUser.name,
-          user_role: currentUser.role,
-          action_type: 'AUTH',
-          entity_type: 'SESSION',
-          entity_id: currentUser.id,
-          before_value: 'جلسة نشطة',
-          after_value: 'قفل تلقائي بسبب عدم النشاط (Inactivity Auto-Lock)',
-          ip_address: '<LAN_CLIENT_IP>'
-        }).catch(() => {});
+        if (currentUser) {
+          auditRepo.log({
+            user_id: currentUser.id,
+            user_name: currentUser.name,
+            user_role: currentUser.role,
+            action_type: 'AUTH',
+            entity_type: 'SESSION',
+            entity_id: currentUser.id,
+            before_value: 'جلسة نشطة',
+            after_value: 'قفل تلقائي بسبب عدم النشاط (Inactivity Auto-Lock)',
+            ip_address: '<LAN_CLIENT_IP>'
+          }).catch(() => {});
+        }
       }
     }, 1000);
 
@@ -219,18 +228,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
    * Logout
    */
   const logout = async () => {
-    await auditRepo.log({
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
-      action_type: 'AUTH',
-      entity_type: 'LOGOUT',
-      entity_id: currentUser.id,
-      before_value: `المستخدم: ${currentUser.username}`,
-      after_value: 'تسجيل خروج رسمي وإنهاء الجلسة',
-      ip_address: '<LAN_CLIENT_IP>'
-    }).catch(() => {});
+    if (currentUser && currentUser.id !== 'guest') {
+      await auditRepo.log({
+        user_id: currentUser.id,
+        user_name: currentUser.name,
+        user_role: currentUser.role,
+        action_type: 'AUTH',
+        entity_type: 'LOGOUT',
+        entity_id: currentUser.id,
+        before_value: `المستخدم: ${currentUser.username}`,
+        after_value: 'تسجيل خروج رسمي وإنهاء الجلسة',
+        ip_address: '<LAN_CLIENT_IP>'
+      }).catch(() => {});
+    }
 
+    setCurrentUser(GUEST_USER);
     setIsAuthenticated(false);
     setIsLocked(false);
   };
@@ -239,6 +251,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
    * Unlock session with password
    */
   const unlockSession = async (password: string): Promise<{ success: boolean; error?: string }> => {
+    if (!currentUser) return { success: false, error: 'تعذر التحقق من الحساب: لا توجد جلسة نشطة' };
     try {
       const userRecord = await userRepo.getByUsername(currentUser.username);
       if (!userRecord) return { success: false, error: 'تعذر التحقق من الحساب' };
@@ -282,6 +295,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
    * Forced/Voluntary password change
    */
   const changePassword = async (newPassword: string): Promise<{ success: boolean; error?: string }> => {
+    if (!currentUser) return { success: false, error: 'لا يوجد مستخدم مسجل حالياً' };
     if (newPassword.length < 8) {
       return { success: false, error: 'يجب أن لا تقل كلمة المرور عن 8 أحرف وأرقام' };
     }

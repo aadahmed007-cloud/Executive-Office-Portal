@@ -4,46 +4,17 @@ import { AuthProvider } from './features/auth/AuthContext';
 import { MainLayout } from './ui/layouts/MainLayout';
 import { ErrorBoundary } from './ui/components/ErrorBoundary';
 import { sqliteEngine } from './data/database/sqliteEngine';
-import { runConflictTests } from './tests/conflictDetector.test';
-import { runSerialTests } from './tests/serialGenerator.test';
-import { runOverdueTests } from './tests/overdueLogic.test';
-import { runAccessControlRuleTests, runAccessControlRepositoryTests } from './tests/accessControl.test';
-import { runAuditIntegrityRuleTests, runAuditDatabaseTriggerTests } from './tests/auditIntegrity.test';
-import { HardDrive, ShieldCheck } from 'lucide-react';
+import { HardDrive } from 'lucide-react';
 
 export default function App() {
   const [isDbReady, setIsDbReady] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Run deterministic domain tests
-    try {
-      const conflictOk = runConflictTests();
-      const serialOk = runSerialTests();
-      const overdueOk = runOverdueTests();
-      const accessRuleOk = runAccessControlRuleTests();
-      runAuditIntegrityRuleTests().then((auditRuleOk) => {
-        if (conflictOk && serialOk && overdueOk && accessRuleOk && auditRuleOk) {
-          console.log('✅ All deterministic domain unit tests & cryptographic rules passed successfully.');
-        }
-      });
-    } catch (e) {
-      console.warn('Unit tests verification warning:', e);
-    }
-
     sqliteEngine
       .init()
-      .then(async () => {
+      .then(() => {
         setIsDbReady(true);
-        try {
-          const repoAccessOk = await runAccessControlRepositoryTests();
-          const triggerOk = await runAuditDatabaseTriggerTests();
-          if (repoAccessOk && triggerOk) {
-            console.log('🛡️ Phase C & D: Repository access control and audit trigger immutability verified.');
-          }
-        } catch (e) {
-          console.warn('Integration test warning:', e);
-        }
       })
       .catch((err) => {
         console.error('Failed to initialize SQLite WASM engine:', err);

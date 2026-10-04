@@ -9,6 +9,7 @@ import {
   auditRepo,
   notificationRepo
 } from '../../data/sqlite/repositories';
+import { CommandService } from '../../domain/services/commandService';
 import { AuditLogger } from '../../domain/security/auditLogger';
 import {
   Meeting,
@@ -117,20 +118,20 @@ export const ChairmanDashboard: React.FC<ChairmanDashboardProps> = ({ onNavigate
     try {
       const phraseText = `${standardPhrase}${customDirective ? ` - ${customDirective}` : ''}`;
 
-      await correspondenceRepo.recordApproval({
+      await CommandService.recordApproval({
         correspondence_id: selectedLetter.id,
         decision_type: decisionType,
         standard_phrase: standardPhrase,
         custom_directive: customDirective,
         decided_at: new Date().toISOString(),
         decided_by_name: currentUser.name
-      });
+      }, currentUser);
 
       const newStatus = decisionType === 'approved' ? 'approved' : decisionType === 'rejected' ? 'rejected' : decisionType === 'postponed' ? 'postponed' : 'referred';
-      await correspondenceRepo.update(selectedLetter.id, { status: newStatus });
+      await CommandService.updateCorrespondence(selectedLetter.id, { status: newStatus }, currentUser);
 
       if (decisionType === 'referred' || (decisionType === 'approved' && customDirective)) {
-        await correspondenceRepo.addRouting({
+        await CommandService.addRouting({
           correspondence_id: selectedLetter.id,
           from_entity: 'مكتب رئيس مجلس الإدارة',
           to_department_id: 'dept-auto',
@@ -139,10 +140,10 @@ export const ChairmanDashboard: React.FC<ChairmanDashboardProps> = ({ onNavigate
           deadline: referralDeadline,
           status: 'sent',
           routed_at: new Date().toISOString()
-        });
+        }, currentUser);
 
         const nextCode = await directiveRepo.getNextCode();
-        const createdDirective = await directiveRepo.create({
+        await CommandService.createDirective({
           code: nextCode,
           title: `تكليف رئاسي بشأن: ${selectedLetter.subject}`,
           instruction: phraseText,
@@ -158,30 +159,16 @@ export const ChairmanDashboard: React.FC<ChairmanDashboardProps> = ({ onNavigate
           due_date: referralDeadline,
           matter_id: selectedLetter.matter_id || null,
           created_by: currentUser.name
-        });
-
-        await AuditLogger.logDirectiveCreation(currentUser, createdDirective);
+        }, currentUser);
       }
 
-      await auditRepo.log({
-        user_id: currentUser.id,
-        user_name: currentUser.name,
-        user_role: currentUser.role,
-        action_type: 'DECIDE',
-        entity_type: 'CORRESPONDENCE',
-        entity_id: selectedLetter.id,
-        before_value: `الحالة: ${selectedLetter.status}`,
-        after_value: `تأشيرة رئيس مجلس الإدارة (${decisionType}): ${phraseText}`,
-        ip_address: '10.120.4.10 (المكتب الرئاسي)'
-      });
-
-      await notificationRepo.create({
+      await CommandService.createNotification({
         recipient_role: 'SECRETARY',
         title: `تأشيرة جديدة من السيد رئيس مجلس الإدارة`,
         body: `تم إصدار تأشيرة على الخطاب رقم ${selectedLetter.serial_number}: ${phraseText}`,
         confidentiality: selectedLetter.confidentiality,
         is_read: false
-      });
+      }, currentUser);
 
       setIsEndorsementModalOpen(false);
       setCustomDirective('');

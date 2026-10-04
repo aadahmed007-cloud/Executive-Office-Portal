@@ -27,24 +27,24 @@ export const MainLayout: React.FC = () => {
 
   // Active view tab state (default changes based on role)
   const [activeTab, setActiveTab] = useState<string>(() =>
-    currentUser.role === 'CHAIRMAN' ? 'dashboard_chairman' : 'dashboard_secretary'
+    currentUser?.role === 'CHAIRMAN' ? 'dashboard_chairman' : 'dashboard_secretary'
   );
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // If user is not authenticated, render official LoginView
-  if (!isAuthenticated) {
-    return <LoginView />;
-  }
-
-  // If role switches, switch default dashboard if on a dashboard
+  // If role switches or user logs in, adjust default dashboard
   React.useEffect(() => {
-    if (currentUser.role === 'CHAIRMAN' && activeTab === 'dashboard_secretary') {
+    if (currentUser?.role === 'CHAIRMAN' && activeTab === 'dashboard_secretary') {
       setActiveTab('dashboard_chairman');
-    } else if (currentUser.role === 'SECRETARY' && activeTab === 'dashboard_chairman') {
+    } else if (currentUser?.role === 'SECRETARY' && activeTab === 'dashboard_chairman') {
       setActiveTab('dashboard_secretary');
     }
-  }, [currentUser.role]);
+  }, [currentUser?.role]);
+
+  // If user is not authenticated or session not initialized, render official LoginView
+  if (!isAuthenticated || !currentUser) {
+    return <LoginView />;
+  }
 
   const handleDataReset = () => {
     setRefreshKey((prev) => prev + 1);

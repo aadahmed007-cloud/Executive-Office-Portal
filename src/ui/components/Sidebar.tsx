@@ -24,7 +24,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
   const { currentUser } = useAuth();
   const { t } = useI18n();
 
-  const isChairman = currentUser.role === 'CHAIRMAN';
+  const isChairman = currentUser?.role === 'CHAIRMAN';
 
   // Navigation items tailored to roles
   const secretaryNav = [

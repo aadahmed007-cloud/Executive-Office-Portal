@@ -16,32 +16,30 @@ export const LoginView: React.FC = () => {
   const { login, throttleSecondsRemaining } = useAuth();
   const { t } = useI18n();
 
-  const [username, setUsername] = useState('secretary');
-  const [password, setPassword] = useState('Pass#Secr2026');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!username.trim() || !password) {
+      setErrorMessage('يرجى إدخال اسم المستخدم وكلمة المرور');
+      return;
+    }
     if (throttleSecondsRemaining > 0) return;
 
     setErrorMessage(null);
     setIsSubmitting(true);
 
     try {
-      const result = await login(username, password);
+      const result = await login(username.trim(), password);
       if (!result.success) {
         setErrorMessage(result.error || 'فشل تسجيل الدخول');
       }
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const setPreset = (u: string, p: string) => {
-    setUsername(u);
-    setPassword(p);
-    setErrorMessage(null);
   };
 
   return (
@@ -135,33 +133,14 @@ export const LoginView: React.FC = () => {
           </button>
         </form>
 
-        {/* Prototype Preset Accounts Helper */}
-        <div className="pt-4 border-t border-slate-800 text-slate-400 text-[11px] space-y-2">
-          <div className="flex items-center gap-1.5 text-slate-300 font-semibold">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>بيانات الاعتماد التجريبية المشفرة (انقر للتعيين):</span>
+        {/* Security Notice Footer */}
+        <div className="pt-4 border-t border-slate-800 text-slate-400 text-[11px] space-y-2 text-center">
+          <div className="flex items-center justify-center gap-1.5 text-slate-400">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>نظام سيادي مخصص لمكتب رئيس مجلس الإدارة والقيادات المصرح لها</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => setPreset('secretary', 'Pass#Secr2026')}
-              className="p-2 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700 text-right cursor-pointer transition"
-            >
-              <div className="font-bold text-slate-200">السكرتير التنفيذي الأول</div>
-              <div className="text-[10px] text-emerald-400 font-mono">secretary / Pass#Secr2026</div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setPreset('chairman', 'Pass#Chair2026')}
-              className="p-2 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700 text-right cursor-pointer transition"
-            >
-              <div className="font-bold text-slate-200">رئيس مجلس الإدارة</div>
-              <div className="text-[10px] text-amber-400 font-mono">chairman / Pass#Chair2026</div>
-            </button>
-          </div>
-          <p className="text-[10px] text-slate-500 text-center pt-2">
-            يتم فحص الهاش والملح (PBKDF2 100K iterations) محلياً دون إرسال أي بيانات نصية.
+          <p className="text-[10px] text-slate-500 font-mono">
+            جميع محاولات الدخول وحركات الحسابات موثقة بسجل رقابي تشفيري غير قابل للتعديل.
           </p>
         </div>
       </div>

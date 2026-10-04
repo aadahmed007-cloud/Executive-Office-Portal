@@ -7,6 +7,7 @@ import {
   auditRepo,
   notificationRepo
 } from '../../data/sqlite/repositories';
+import { CommandService } from '../../domain/services/commandService';
 import { AuditLogger } from '../../domain/security/auditLogger';
 import {
   Meeting,
@@ -78,6 +79,7 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
   const [newDecisionDept, setNewDecisionDept] = useState('قطاع العمليات والخدمات البريدية');
   const [newDecisionPerson, setNewDecisionPerson] = useState('رئيس قطاع العمليات');
   const [newDecisionDueDate, setNewDecisionDueDate] = useState('2026-10-20');
+  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
   const isChairman = currentUser.role === 'CHAIRMAN';
   const isSecretary = currentUser.role === 'SECRETARY';
@@ -134,21 +136,9 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
 
   // --- Handlers ---
   const handleTransitionStatus = async (newStatus: Meeting['status'], label: string) => {
-    await meetingRepo.update(meeting.id, { status: newStatus });
+    await CommandService.updateMeeting(meeting.id, { status: newStatus }, currentUser);
     setCurrentStatus(newStatus);
-
-    await auditRepo.log({
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
-      action_type: 'UPDATE',
-      entity_type: 'MEETING_STATUS',
-      entity_id: meeting.id,
-      before_value: `الحالة السابقة: ${currentStatus}`,
-      after_value: `تغيير حالة الاجتماع إلى: ${label}`,
-      ip_address: '10.120.4.x (LAN)'
-    });
-
+    setActionFeedback(`تم تغيير حالة الاجتماع إلى: ${label}`);
     onMeetingUpdated();
   };
 
@@ -167,21 +157,10 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
       }
     ];
 
-    await meetingRepo.setAgenda(meeting.id, updated);
-    await auditRepo.log({
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
-      action_type: 'CREATE',
-      entity_type: 'AGENDA_ITEM',
-      entity_id: meeting.id,
-      before_value: null,
-      after_value: `إضافة بند للأجندة: ${newAgendaTitle} (${newAgendaDuration} دقيقة)`,
-      ip_address: '10.120.4.x (LAN)'
-    });
-
+    await CommandService.setAgenda(meeting.id, updated, currentUser);
     setNewAgendaTitle('');
     setNewAgendaPresenter('');
+    setActionFeedback('تمت إضافة بند جديد لجدول الأعمال بنجاح.');
     await loadDetails();
   };
 
@@ -200,84 +179,49 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
       }
     ];
 
-    await meetingRepo.setAttendees(meeting.id, updated);
-    await auditRepo.log({
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
-      action_type: 'CREATE',
-      entity_type: 'MEETING_ATTENDEE',
-      entity_id: meeting.id,
-      before_value: null,
-      after_value: `إضافة مشارك للاجتماع: ${newAttendeeName} (${newAttendeeTitle} - ${newAttendeeEntity})`,
-      ip_address: '10.120.4.x (LAN)'
-    });
-
+    await CommandService.setAttendees(meeting.id, updated, currentUser);
     setNewAttendeeName('');
     setNewAttendeeTitle('');
+    setActionFeedback('تم قيد المشارك في قائمة الحضور الرسمية بنجاح.');
     await loadDetails();
   };
 
   const handleSaveDraftMinutes = async () => {
-    await meetingRepo.saveMinutes({
+    await CommandService.saveMinutes({
       meeting_id: meeting.id,
       draft_content: draftMinutesContent,
       status: 'draft'
-    });
+    }, currentUser);
 
-    await auditRepo.log({
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
-      action_type: 'UPDATE',
-      entity_type: 'MEETING_MINUTES',
-      entity_id: meeting.id,
-      before_value: null,
-      after_value: 'حفظ مسودة محضر الجلسة بواسطة السكرتارية التنفيذية',
-      ip_address: '10.120.4.x (LAN)'
-    });
-
-    await notificationRepo.create({
+    await CommandService.createNotification({
       recipient_role: 'CHAIRMAN',
       title: `مسودة محضر اجتماع جاهزة للاعتماد`,
       body: `تم تدوين مسودة محضر الاجتماع «${meeting.title}» ومتاحة الآن للمراجعة والاعتماد.`,
       confidentiality: meeting.confidentiality,
       is_read: false
-    });
+    }, currentUser);
 
     await loadDetails();
-    alert('تم حفظ مسودة محضر الاجتماع وإرسال إشعار للسيد رئيس مجلس الإدارة.');
+    setActionFeedback('تم حفظ مسودة محضر الاجتماع وإرسال إشعار للسيد رئيس مجلس الإدارة.');
   };
 
   const handleApproveMinutes = async () => {
     const approvalText = approvedMinutesContent || draftMinutesContent;
-    await meetingRepo.saveMinutes({
+    await CommandService.saveMinutes({
       meeting_id: meeting.id,
       draft_content: draftMinutesContent,
       approved_content: approvalText,
       status: 'approved',
       approved_by: currentUser.name,
       approved_at: new Date().toISOString()
-    });
+    }, currentUser);
 
-    await meetingRepo.update(meeting.id, { status: 'minutes_approved' });
+    await CommandService.updateMeeting(meeting.id, { status: 'minutes_approved' }, currentUser);
     setCurrentStatus('minutes_approved');
-
-    await auditRepo.log({
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
-      action_type: 'DECIDE',
-      entity_type: 'MEETING_MINUTES',
-      entity_id: meeting.id,
-      before_value: 'مسودة محضر الجلسة',
-      after_value: `اعتماد محضر الاجتماع رسمياً من رئيس مجلس الإدارة: ${meeting.title}`,
-      ip_address: '10.120.4.10 (المكتب الرئاسي)'
-    });
 
     await loadDetails();
     onMeetingUpdated();
-    alert('تم اعتماد محضر الجلسة رسمياً وتثبيت توقيع السيد رئيس مجلس الإدارة.');
+    setActionFeedback('تم اعتماد محضر الجلسة رسمياً وتثبيت توقيع السيد رئيس مجلس الإدارة.');
   };
 
   const handleAddDecision = async (e: React.FormEvent) => {
@@ -285,7 +229,7 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
     if (!newDecisionContent) return;
 
     const nextOrder = decisions.length + 1;
-    await meetingRepo.addDecision({
+    await CommandService.addDecision({
       meeting_id: meeting.id,
       order_index: nextOrder,
       content: newDecisionContent,
@@ -293,27 +237,16 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
       assigned_to_name: newDecisionPerson,
       due_date: newDecisionDueDate,
       status: 'in_progress'
-    });
-
-    await auditRepo.log({
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
-      action_type: 'CREATE',
-      entity_type: 'MEETING_DECISION',
-      entity_id: meeting.id,
-      before_value: null,
-      after_value: `تسجيل قرار اجتماع: ${newDecisionContent} (المكلف: ${newDecisionPerson})`,
-      ip_address: '10.120.4.x (LAN)'
-    });
+    }, currentUser);
 
     setNewDecisionContent('');
+    setActionFeedback('تم قيد القرار التنفيذي بنجاح.');
     await loadDetails();
   };
 
   const handleConvertToDirective = async (decision: Decision) => {
     const nextCode = await directiveRepo.getNextCode();
-    const createdDirective = await directiveRepo.create({
+    const createdDirective = await CommandService.createDirective({
       code: nextCode,
       title: `تكليف تنفيذي ناتج عن اجتماع: ${meeting.title}`,
       instruction: decision.content,
@@ -329,12 +262,10 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
       due_date: decision.due_date,
       matter_id: meeting.matter_id || null,
       created_by: currentUser.name
-    });
-
-    await AuditLogger.logDirectiveCreation(currentUser, createdDirective);
+    }, currentUser);
 
     await loadDetails();
-    alert(`تم تحويل القرار بنجاح إلى التكليف الرئاسي الرسمي رقم ${createdDirective.code}.`);
+    setActionFeedback(`تم تحويل القرار بنجاح إلى التكليف الرئاسي الرسمي رقم ${createdDirective.code}.`);
   };
 
   return (
@@ -385,6 +316,22 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Action Feedback Toast */}
+        {actionFeedback && (
+          <div className="bg-emerald-50 border-b border-emerald-200 px-5 py-2.5 flex items-center justify-between text-xs text-emerald-800">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+              <span className="font-semibold">{actionFeedback}</span>
+            </div>
+            <button
+              onClick={() => setActionFeedback(null)}
+              className="text-emerald-600 hover:text-emerald-900 text-sm font-bold cursor-pointer"
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* Workflow Lifecycle Transition Bar */}
         <div className="bg-slate-50 px-5 py-2.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">

@@ -9,7 +9,8 @@ import {
   IAuditRepository,
   IUserRepository,
   ISettingsRepository,
-  UserContext
+  UserContext,
+  SecurityAuthorizationError
 } from '../contracts';
 import {
   Meeting,
@@ -162,7 +163,10 @@ export class SqliteMeetingRepository implements IMeetingRepository {
     return meeting;
   }
 
-  async create(data: Omit<Meeting, 'id' | 'created_at' | 'updated_at'>): Promise<Meeting> {
+  async create(data: Omit<Meeting, 'id' | 'created_at' | 'updated_at'>, userContext?: UserContext): Promise<Meeting> {
+    if (data.confidentiality !== 'normal' && !canAccessConfidential(userContext)) {
+      throw new SecurityAuthorizationError('غير مصرح لك بجدولة اجتماع ذي صفة سرية دون تصريح أمني');
+    }
     const id = `meet-${Date.now()}`;
     const now = new Date().toISOString();
     sqliteEngine.run(
@@ -187,7 +191,12 @@ export class SqliteMeetingRepository implements IMeetingRepository {
     return created!;
   }
 
-  async update(id: string, meeting: Partial<Meeting>): Promise<Meeting> {
+  async update(id: string, meeting: Partial<Meeting>, userContext?: UserContext): Promise<Meeting> {
+    const existing = await this.getById(id, { can_view_confidential: true });
+    if (!existing) throw new Error('الاجتماع المطلوب غير موجود');
+    if (existing.confidentiality !== 'normal' && !canAccessConfidential(userContext)) {
+      throw new SecurityAuthorizationError('غير مصرح لك بتعديل بيانات هذا الاجتماع السري');
+    }
     const now = new Date().toISOString();
     const fields: string[] = ['updated_at = ?'];
     const params: any[] = [now];
@@ -204,7 +213,10 @@ export class SqliteMeetingRepository implements IMeetingRepository {
     return updated!;
   }
 
-  async softDelete(id: string): Promise<boolean> {
+  async softDelete(id: string, userContext?: UserContext): Promise<boolean> {
+    if (!userContext?.userId) {
+      throw new SecurityAuthorizationError('لا يمكن حذف أو أرشفة الاجتماع دون توثيق هوية المستخدم في الجلسة');
+    }
     const now = new Date().toISOString();
     sqliteEngine.run('UPDATE meetings SET deleted_at = ? WHERE id = ?', [now, id]);
     return true;
@@ -216,7 +228,14 @@ export class SqliteMeetingRepository implements IMeetingRepository {
     return sqliteEngine.query<MeetingAttendee>('SELECT * FROM meeting_attendees WHERE meeting_id = ?', [meetingId]);
   }
 
-  async setAttendees(meetingId: string, attendees: Omit<MeetingAttendee, 'id' | 'meeting_id'>[]): Promise<void> {
+  async setAttendees(meetingId: string, attendees: Omit<MeetingAttendee, 'id' | 'meeting_id'>[], userContext?: UserContext): Promise<void> {
+    if (!userContext?.userId) {
+      throw new SecurityAuthorizationError('لا يمكن تعديل قائمة الحضور دون توثيق هوية المستخدم في الجلسة');
+    }
+    const meeting = await this.getById(meetingId, userContext);
+    if (!meeting) {
+      throw new SecurityAuthorizationError('الاجتماع غير موجود أو غير مصرح لك بالوصول إليه');
+    }
     sqliteEngine.run('DELETE FROM meeting_attendees WHERE meeting_id = ?', [meetingId]);
     for (const att of attendees) {
       const id = `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
@@ -233,7 +252,14 @@ export class SqliteMeetingRepository implements IMeetingRepository {
     return sqliteEngine.query<AgendaItem>('SELECT * FROM agenda_items WHERE meeting_id = ? ORDER BY order_index ASC', [meetingId]);
   }
 
-  async setAgenda(meetingId: string, items: Omit<AgendaItem, 'id' | 'meeting_id'>[]): Promise<void> {
+  async setAgenda(meetingId: string, items: Omit<AgendaItem, 'id' | 'meeting_id'>[], userContext?: UserContext): Promise<void> {
+    if (!userContext?.userId) {
+      throw new SecurityAuthorizationError('لا يمكن تعديل جدول الأعمال دون توثيق هوية المستخدم في الجلسة');
+    }
+    const meeting = await this.getById(meetingId, userContext);
+    if (!meeting) {
+      throw new SecurityAuthorizationError('الاجتماع غير موجود أو غير مصرح لك بالوصول إليه');
+    }
     sqliteEngine.run('DELETE FROM agenda_items WHERE meeting_id = ?', [meetingId]);
     for (const item of items) {
       const id = `agenda-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
@@ -251,7 +277,17 @@ export class SqliteMeetingRepository implements IMeetingRepository {
     return rows[0] || null;
   }
 
-  async saveMinutes(minutes: Omit<MeetingMinutes, 'id'>): Promise<MeetingMinutes> {
+  async saveMinutes(minutes: Omit<MeetingMinutes, 'id'>, userContext?: UserContext): Promise<MeetingMinutes> {
+    if (!userContext?.userId) {
+      throw new SecurityAuthorizationError('لا يمكن تحرير محضر الاجتماع دون توثيق هوية المستخدم في الجلسة');
+    }
+    if (minutes.status === 'approved' && userContext.role !== 'CHAIRMAN') {
+      throw new SecurityAuthorizationError('اعتماد محضر الاجتماع مقصور حصرياً على السيد رئيس مجلس الإدارة (Chairman Only)');
+    }
+    const meeting = await this.getById(minutes.meeting_id, userContext);
+    if (!meeting) {
+      throw new SecurityAuthorizationError('الاجتماع غير موجود أو غير مصرح لك بالوصول إليه');
+    }
     const existing = await this.getMinutes(minutes.meeting_id, { can_view_confidential: true });
     if (existing) {
       sqliteEngine.run(
@@ -275,7 +311,14 @@ export class SqliteMeetingRepository implements IMeetingRepository {
     return sqliteEngine.query<Decision>('SELECT * FROM decisions WHERE meeting_id = ? ORDER BY order_index ASC', [meetingId]);
   }
 
-  async addDecision(decision: Omit<Decision, 'id'>): Promise<Decision> {
+  async addDecision(decision: Omit<Decision, 'id'>, userContext?: UserContext): Promise<Decision> {
+    if (!userContext?.userId) {
+      throw new SecurityAuthorizationError('لا يمكن تسجيل قرارات الاجتماع دون توثيق هوية المستخدم في الجلسة');
+    }
+    const meeting = await this.getById(decision.meeting_id, userContext);
+    if (!meeting) {
+      throw new SecurityAuthorizationError('الاجتماع غير موجود أو غير مصرح لك بالوصول إليه');
+    }
     const id = `dec-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     sqliteEngine.run(
       'INSERT INTO decisions (id, meeting_id, order_index, content, assigned_department_id, assigned_to_name, due_date, directive_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -380,7 +423,10 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
     return generateSerialNumber(prefix, count, year);
   }
 
-  async create(data: Omit<Correspondence, 'id' | 'created_at' | 'updated_at'>): Promise<Correspondence> {
+  async create(data: Omit<Correspondence, 'id' | 'created_at' | 'updated_at'>, userContext?: UserContext): Promise<Correspondence> {
+    if (data.confidentiality !== 'normal' && !canAccessConfidential(userContext)) {
+      throw new SecurityAuthorizationError('غير مصرح لك بإنشاء أو تداول مكاتبات ذات تصنيف سري أو سري للغاية دون تصريح أمني');
+    }
     const id = `corr-${data.type === 'incoming' ? 'in' : 'out'}-${Date.now()}`;
     const now = new Date().toISOString();
     sqliteEngine.run(
@@ -404,11 +450,16 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
         data.created_by
       ]
     );
-    const created = await this.getById(id);
+    const created = await this.getById(id, { can_view_confidential: true });
     return created!;
   }
 
-  async update(id: string, item: Partial<Correspondence>): Promise<Correspondence> {
+  async update(id: string, item: Partial<Correspondence>, userContext?: UserContext): Promise<Correspondence> {
+    const existing = await this.getById(id, { can_view_confidential: true });
+    if (!existing) throw new Error('المعاملة المطلوبة غير موجودة');
+    if (existing.confidentiality !== 'normal' && !canAccessConfidential(userContext)) {
+      throw new SecurityAuthorizationError('غير مصرح لك بتعديل بيانات هذه المعاملة السرية');
+    }
     const now = new Date().toISOString();
     const fields: string[] = ['updated_at = ?'];
     const params: any[] = [now];
@@ -425,11 +476,14 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
     }
     params.push(id);
     sqliteEngine.run(`UPDATE correspondence SET ${fields.join(', ')} WHERE id = ?`, params);
-    const updated = await this.getById(id);
+    const updated = await this.getById(id, { can_view_confidential: true });
     return updated!;
   }
 
-  async softDelete(id: string): Promise<boolean> {
+  async softDelete(id: string, userContext?: UserContext): Promise<boolean> {
+    if (!userContext?.userId) {
+      throw new SecurityAuthorizationError('لا يمكن حذف أو أرشفة المعاملة دون توثيق هوية المستخدم في الجلسة');
+    }
     const now = new Date().toISOString();
     sqliteEngine.run('UPDATE correspondence SET deleted_at = ? WHERE id = ?', [now, id]);
     return true;
@@ -442,7 +496,10 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
     return rows[0] || null;
   }
 
-  async saveBriefingNote(note: Omit<BriefingNote, 'id'>): Promise<BriefingNote> {
+  async saveBriefingNote(note: Omit<BriefingNote, 'id'>, userContext?: UserContext): Promise<BriefingNote> {
+    if (userContext?.role !== 'SECRETARY' && userContext?.role !== 'CHAIRMAN') {
+      throw new SecurityAuthorizationError('إعداد مذكرات العرض مقصور على السكرتارية التنفيذية ورئيس مجلس الإدارة');
+    }
     const existing = await this.getBriefingNote(note.correspondence_id, { can_view_confidential: true });
     if (existing) {
       sqliteEngine.run(
@@ -467,7 +524,10 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
     return rows[0] || null;
   }
 
-  async recordApproval(approval: Omit<Approval, 'id'>): Promise<Approval> {
+  async recordApproval(approval: Omit<Approval, 'id'>, userContext?: UserContext): Promise<Approval> {
+    if (userContext?.role !== 'CHAIRMAN') {
+      throw new SecurityAuthorizationError('تأشيرة الاعتماد الرئاسية مقصورة حصرياً على السيد رئيس مجلس الإدارة (Chairman Only)');
+    }
     const id = `appr-${Date.now()}`;
     sqliteEngine.run(
       'INSERT INTO approvals (id, correspondence_id, decision_type, standard_phrase, custom_directive, decided_at, decided_by_name) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -482,7 +542,14 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
     return sqliteEngine.query<CorrespondenceRouting>('SELECT * FROM correspondence_routing WHERE correspondence_id = ? ORDER BY routed_at ASC', [correspondenceId]);
   }
 
-  async addRouting(routing: Omit<CorrespondenceRouting, 'id'>): Promise<CorrespondenceRouting> {
+  async addRouting(routing: Omit<CorrespondenceRouting, 'id'>, userContext?: UserContext): Promise<CorrespondenceRouting> {
+    if (!userContext?.userId) {
+      throw new SecurityAuthorizationError('لا يمكن إحالة المعاملة دون توثيق هوية المستخدم في الجلسة');
+    }
+    const parent = await this.getById(routing.correspondence_id, userContext);
+    if (!parent) {
+      throw new SecurityAuthorizationError('المعاملة غير موجودة أو غير مصرح لك بالوصول إليها');
+    }
     const id = `rout-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     sqliteEngine.run(
       'INSERT INTO correspondence_routing (id, correspondence_id, from_entity, to_department_id, to_department_name, action_required, deadline, status, routed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -502,7 +569,13 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
     return sqliteEngine.query<Attachment>(sql, [correspondenceId]);
   }
 
-  async addAttachment(att: Omit<Attachment, 'id'>): Promise<Attachment> {
+  async addAttachment(att: Omit<Attachment, 'id'>, userContext?: UserContext): Promise<Attachment> {
+    if (!userContext?.userId) {
+      throw new SecurityAuthorizationError('لا يمكن رفع المرفق دون توثيق هوية المستخدم في الجلسة');
+    }
+    if (att.confidentiality !== 'normal' && !canAccessConfidential(userContext)) {
+      throw new SecurityAuthorizationError('غير مصرح لك بإضافة مرفقات سرية دون تصريح أمني');
+    }
     const id = `att-${Date.now()}`;
     sqliteEngine.run(
       'INSERT INTO attachments (id, entity_type, entity_id, file_name, file_size_kb, mime_type, confidentiality, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
@@ -562,7 +635,13 @@ export class SqliteDirectiveRepository implements IDirectiveRepository {
     return generateSerialNumber('DIR', count, year);
   }
 
-  async create(data: Omit<Directive, 'id' | 'created_at' | 'updated_at'>): Promise<Directive> {
+  async create(data: Omit<Directive, 'id' | 'created_at' | 'updated_at'>, userContext?: UserContext): Promise<Directive> {
+    if (userContext?.role !== 'CHAIRMAN' && userContext?.role !== 'SECRETARY') {
+      throw new SecurityAuthorizationError('إصدار التوجيهات والتكليفات الرئاسية مقصور على القيادة المخولة');
+    }
+    if (data.confidentiality !== 'normal' && !canAccessConfidential(userContext)) {
+      throw new SecurityAuthorizationError('غير مصرح لك بإنشاء تكليف رئاسي ذي تصنيف سري دون تصريح أمني');
+    }
     const id = `dir-${Date.now()}`;
     const now = new Date().toISOString();
     sqliteEngine.run(
@@ -591,7 +670,12 @@ export class SqliteDirectiveRepository implements IDirectiveRepository {
     return created!;
   }
 
-  async update(id: string, directive: Partial<Directive>): Promise<Directive> {
+  async update(id: string, directive: Partial<Directive>, userContext?: UserContext): Promise<Directive> {
+    const existing = await this.getById(id, { can_view_confidential: true });
+    if (!existing) throw new Error('التكليف المطلوب غير موجود');
+    if (existing.confidentiality !== 'normal' && !canAccessConfidential(userContext)) {
+      throw new SecurityAuthorizationError('غير مصرح لك بتعديل بيانات هذا التكليف السري');
+    }
     const now = new Date().toISOString();
     const fields: string[] = ['updated_at = ?'];
     const params: any[] = [now];
@@ -608,7 +692,10 @@ export class SqliteDirectiveRepository implements IDirectiveRepository {
     return updated!;
   }
 
-  async softDelete(id: string): Promise<boolean> {
+  async softDelete(id: string, userContext?: UserContext): Promise<boolean> {
+    if (!userContext?.userId) {
+      throw new SecurityAuthorizationError('لا يمكن حذف أو أرشفة التكليف دون توثيق هوية المستخدم في الجلسة');
+    }
     const now = new Date().toISOString();
     sqliteEngine.run('UPDATE directives SET deleted_at = ? WHERE id = ?', [now, id]);
     return true;
@@ -620,7 +707,14 @@ export class SqliteDirectiveRepository implements IDirectiveRepository {
     return sqliteEngine.query<DirectiveUpdate>('SELECT * FROM directive_updates WHERE directive_id = ? ORDER BY created_at DESC', [directiveId]);
   }
 
-  async addUpdate(update: Omit<DirectiveUpdate, 'id' | 'created_at'>): Promise<DirectiveUpdate> {
+  async addUpdate(update: Omit<DirectiveUpdate, 'id' | 'created_at'>, userContext?: UserContext): Promise<DirectiveUpdate> {
+    if (!userContext?.userId) {
+      throw new SecurityAuthorizationError('لا يمكن تسجيل متابعة على التكليف دون توثيق هوية المستخدم في الجلسة');
+    }
+    const dir = await this.getById(update.directive_id, userContext);
+    if (!dir) {
+      throw new SecurityAuthorizationError('التكليف غير موجود أو غير مصرح لك بالوصول إليه');
+    }
     const id = `dirup-${Date.now()}`;
     const now = new Date().toISOString();
     sqliteEngine.run(
@@ -666,7 +760,10 @@ export class SqliteMatterRepository implements IMatterRepository {
     return matter;
   }
 
-  async create(data: Omit<Matter, 'id' | 'created_at' | 'updated_at'>): Promise<Matter> {
+  async create(data: Omit<Matter, 'id' | 'created_at' | 'updated_at'>, userContext?: UserContext): Promise<Matter> {
+    if (data.confidentiality !== 'normal' && !canAccessConfidential(userContext)) {
+      throw new SecurityAuthorizationError('غير مصرح لك بإنشاء ملف قضية استراتيجية سرية دون تصريح أمني');
+    }
     const id = `matter-${Date.now()}`;
     const now = new Date().toISOString();
     sqliteEngine.run(
@@ -677,7 +774,12 @@ export class SqliteMatterRepository implements IMatterRepository {
     return created!;
   }
 
-  async update(id: string, matter: Partial<Matter>): Promise<Matter> {
+  async update(id: string, matter: Partial<Matter>, userContext?: UserContext): Promise<Matter> {
+    const existing = await this.getById(id, { can_view_confidential: true });
+    if (!existing) throw new Error('الملف الاستراتيجي غير موجود');
+    if (existing.confidentiality !== 'normal' && !canAccessConfidential(userContext)) {
+      throw new SecurityAuthorizationError('غير مصرح لك بتعديل هذا الملف الاستراتيجي السري');
+    }
     const now = new Date().toISOString();
     const fields: string[] = ['updated_at = ?'];
     const params: any[] = [now];
@@ -694,7 +796,10 @@ export class SqliteMatterRepository implements IMatterRepository {
     return updated!;
   }
 
-  async softDelete(id: string): Promise<boolean> {
+  async softDelete(id: string, userContext?: UserContext): Promise<boolean> {
+    if (!userContext?.userId) {
+      throw new SecurityAuthorizationError('لا يمكن حذف أو أرشفة الملف الاستراتيجي دون توثيق هوية المستخدم في الجلسة');
+    }
     const now = new Date().toISOString();
     sqliteEngine.run('UPDATE matters SET deleted_at = ? WHERE id = ?', [now, id]);
     return true;
@@ -706,7 +811,14 @@ export class SqliteMatterRepository implements IMatterRepository {
     return sqliteEngine.query<MatterLink>('SELECT * FROM matter_links WHERE matter_id = ? ORDER BY created_at DESC', [matterId]);
   }
 
-  async addLink(link: Omit<MatterLink, 'id' | 'created_at'>): Promise<MatterLink> {
+  async addLink(link: Omit<MatterLink, 'id' | 'created_at'>, userContext?: UserContext): Promise<MatterLink> {
+    if (!userContext?.userId) {
+      throw new SecurityAuthorizationError('لا يمكن ربط المعاملة بالملف الاستراتيجي دون توثيق هوية المستخدم');
+    }
+    const matter = await this.getById(link.matter_id, userContext);
+    if (!matter) {
+      throw new SecurityAuthorizationError('الملف الاستراتيجي غير موجود أو غير مصرح لك بالوصول إليه');
+    }
     const id = `mlink-${Date.now()}`;
     const now = new Date().toISOString();
     sqliteEngine.run(
@@ -717,7 +829,10 @@ export class SqliteMatterRepository implements IMatterRepository {
     return rows[0];
   }
 
-  async removeLink(linkId: string): Promise<boolean> {
+  async removeLink(linkId: string, userContext?: UserContext): Promise<boolean> {
+    if (!userContext?.userId) {
+      throw new SecurityAuthorizationError('لا يمكن فك الربط دون توثيق هوية المستخدم في الجلسة');
+    }
     sqliteEngine.run('DELETE FROM matter_links WHERE id = ?', [linkId]);
     return true;
   }
@@ -734,7 +849,10 @@ export class SqliteContactRepository implements IContactRepository {
     return rows[0] || null;
   }
 
-  async create(data: Omit<Contact, 'id' | 'created_at'>): Promise<Contact> {
+  async create(data: Omit<Contact, 'id' | 'created_at'>, userContext?: UserContext): Promise<Contact> {
+    if (!userContext?.userId) {
+      throw new SecurityAuthorizationError('لا يمكن إضافة جهة اتصال دون توثيق هوية المستخدم');
+    }
     const id = `cont-${Date.now()}`;
     const now = new Date().toISOString();
     sqliteEngine.run(
@@ -745,7 +863,10 @@ export class SqliteContactRepository implements IContactRepository {
     return created!;
   }
 
-  async update(id: string, contact: Partial<Contact>): Promise<Contact> {
+  async update(id: string, contact: Partial<Contact>, userContext?: UserContext): Promise<Contact> {
+    if (!userContext?.userId) {
+      throw new SecurityAuthorizationError('لا يمكن تعديل بيانات جهة الاتصال دون توثيق هوية المستخدم');
+    }
     const fields: string[] = [];
     const params: any[] = [];
     for (const [key, value] of Object.entries(contact)) {
@@ -760,7 +881,10 @@ export class SqliteContactRepository implements IContactRepository {
     return updated!;
   }
 
-  async softDelete(id: string): Promise<boolean> {
+  async softDelete(id: string, userContext?: UserContext): Promise<boolean> {
+    if (!userContext?.userId) {
+      throw new SecurityAuthorizationError('لا يمكن حذف جهة الاتصال دون توثيق هوية المستخدم في الجلسة');
+    }
     const now = new Date().toISOString();
     sqliteEngine.run('UPDATE contacts SET deleted_at = ? WHERE id = ?', [now, id]);
     return true;
@@ -770,7 +894,10 @@ export class SqliteContactRepository implements IContactRepository {
     return sqliteEngine.query<Interaction>('SELECT * FROM interactions WHERE contact_id = ? ORDER BY date DESC', [contactId]);
   }
 
-  async addInteraction(interaction: Omit<Interaction, 'id'>): Promise<Interaction> {
+  async addInteraction(interaction: Omit<Interaction, 'id'>, userContext?: UserContext): Promise<Interaction> {
+    if (!userContext?.userId) {
+      throw new SecurityAuthorizationError('لا يمكن قيد التواصل دون توثيق هوية المستخدم');
+    }
     const id = `inter-${Date.now()}`;
     sqliteEngine.run(
       'INSERT INTO interactions (id, contact_id, interaction_type, date, summary, recorded_by) VALUES (?, ?, ?, ?, ?, ?)',
@@ -795,7 +922,10 @@ export class SqliteNotificationRepository implements INotificationRepository {
     return sqliteEngine.query<Notification>(sql, params);
   }
 
-  async create(data: Omit<Notification, 'id' | 'created_at'>): Promise<Notification> {
+  async create(data: Omit<Notification, 'id' | 'created_at'>, userContext?: UserContext): Promise<Notification> {
+    if (!userContext?.userId) {
+      throw new SecurityAuthorizationError('لا يمكن إرسال إشعار دون توثيق هوية المستخدم');
+    }
     const id = `notif-${Date.now()}`;
     const now = new Date().toISOString();
     sqliteEngine.run(
@@ -806,11 +936,20 @@ export class SqliteNotificationRepository implements INotificationRepository {
     return rows[0];
   }
 
-  async markAsRead(id: string): Promise<void> {
+  async markAsRead(id: string, userContext?: UserContext): Promise<void> {
+    if (!userContext?.userId) {
+      throw new SecurityAuthorizationError('لا يمكن تحديث حالة الإشعار دون توثيق الجلسة');
+    }
     sqliteEngine.run('UPDATE notifications SET is_read = 1 WHERE id = ?', [id]);
   }
 
-  async markAllAsRead(role: RoleType): Promise<void> {
+  async markAllAsRead(role: RoleType, userContext?: UserContext): Promise<void> {
+    if (!userContext?.userId) {
+      throw new SecurityAuthorizationError('لا يمكن تحديث حالة الإشعارات دون توثيق الجلسة');
+    }
+    if (userContext.role !== role) {
+      throw new SecurityAuthorizationError('غير مصرح لك بتحديث إشعارات دور آخر');
+    }
     sqliteEngine.run('UPDATE notifications SET is_read = 1 WHERE recipient_role = ?', [role]);
   }
 }

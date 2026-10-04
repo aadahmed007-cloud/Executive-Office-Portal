@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../../i18n/i18nContext';
 import { meetingRepo, auditRepo, matterRepo } from '../../data/sqlite/repositories';
+import { CommandService } from '../../domain/services/commandService';
 import { Meeting, Matter } from '../../domain/types';
 import { detectMeetingConflict } from '../../domain/rules/conflictDetector';
 import { maskConfidentialMeeting } from '../../domain/rules/confidentiality';
@@ -90,13 +91,8 @@ export const MeetingsView: React.FC = () => {
 
   const handleCreateMeeting = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (conflictWarning) {
-      if (!window.confirm('يوجد تعارض زمني مع مواعيد أخرى، هل ترغب في تثبيت الحجز بالرغم من التعارض؟')) {
-        return;
-      }
-    }
 
-    const created = await meetingRepo.create({
+    const result = await CommandService.createMeeting({
       title: newTitle,
       location: newLocation,
       start_time: newStartTime,
@@ -107,19 +103,7 @@ export const MeetingsView: React.FC = () => {
       matter_id: newMatterId || null,
       notes: newNotes,
       created_by: currentUser.name
-    });
-
-    await auditRepo.log({
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
-      action_type: 'CREATE',
-      entity_type: 'MEETING',
-      entity_id: created.id,
-      before_value: null,
-      after_value: `جدولة اجتماع جديد: ${created.title} في ${created.location}`,
-      ip_address: '10.120.4.x (LAN)'
-    });
+    }, currentUser);
 
     setIsNewMeetingModalOpen(false);
     setNewTitle('');

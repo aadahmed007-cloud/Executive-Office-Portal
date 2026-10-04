@@ -7,6 +7,7 @@ import {
   matterRepo,
   notificationRepo
 } from '../../data/sqlite/repositories';
+import { CommandService } from '../../domain/services/commandService';
 import { Correspondence, Matter } from '../../domain/types';
 import { maskConfidentialCorrespondence } from '../../domain/rules/confidentiality';
 import { CorrespondenceDetailModal } from './CorrespondenceDetailModal';
@@ -118,7 +119,7 @@ export const CorrespondenceView: React.FC = () => {
     e.preventDefault();
     const nextSerial = await correspondenceRepo.getNextSerial(newType);
 
-    const created = await correspondenceRepo.create({
+    const created = await CommandService.createCorrespondence({
       serial_number: nextSerial,
       type: newType,
       date: new Date().toISOString().split('T')[0],
@@ -132,29 +133,17 @@ export const CorrespondenceView: React.FC = () => {
       status: newType === 'incoming' ? 'registered' : 'draft',
       matter_id: newMatterId || null,
       created_by: currentUser.name
-    });
-
-    await auditRepo.log({
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
-      action_type: 'CREATE',
-      entity_type: 'CORRESPONDENCE',
-      entity_id: created.id,
-      before_value: null,
-      after_value: `تسجيل خطاب ${newType === 'incoming' ? 'وارد' : 'صادر'} رقم ${created.serial_number} من/إلى ${created.source_or_dest_entity} [التصنيف: ${newCategory}]`,
-      ip_address: '10.120.4.x (LAN)'
-    });
+    }, currentUser);
 
     // Notify Chairman if urgent
     if (newPriority === 'top_urgent' || newPriority === 'urgent') {
-      await notificationRepo.create({
+      await CommandService.createNotification({
         recipient_role: 'CHAIRMAN',
         title: `خطاب جديد عاجل: ${created.serial_number}`,
         body: `ورد خطاب عاجل من ${created.source_or_dest_entity} بشأن: ${created.subject}`,
         confidentiality: created.confidentiality,
         is_read: false
-      });
+      }, currentUser);
     }
 
     setIsRegisterModalOpen(false);

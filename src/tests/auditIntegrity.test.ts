@@ -98,13 +98,23 @@ export async function runAuditIntegrityRuleTests(): Promise<boolean> {
     'Audit Test 4 Failed: Broken predecessor link must be detected'
   );
 
-  // 5. Test SHA-256 Checksum Calculation
+  // 5. Genesis Block Tamper Test: Change prev_hash of entry 0
+  const forgedGenesisEntries = JSON.parse(JSON.stringify(entries));
+  forgedGenesisEntries[0].prev_hash = 'FORGED-GENESIS-BLOCK-0000000000000';
+  forgedGenesisEntries[0].entry_hash = await computeAuditEntryHash(forgedGenesisEntries[0]);
+  const forgedGenesisResult = await verifyAuditLogIntegrity(forgedGenesisEntries);
+  console.assert(
+    forgedGenesisResult.isValid === false && forgedGenesisResult.brokenReason?.includes('Genesis Block Violation'),
+    'Audit Test 5 Failed: Altered Genesis prev_hash must fail verification'
+  );
+
+  // 6. Test SHA-256 Checksum Calculation
   const testPayload = JSON.stringify({ test: 'Egypt Post Sovereign Platform', count: 42 });
   const checksum1 = await sha256Hex(testPayload);
   const checksum2 = await sha256Hex(testPayload);
   console.assert(
     checksum1 === checksum2 && checksum1.length === 64,
-    'Audit Test 5 Failed: SHA-256 checksum must be deterministic and 64 hex characters'
+    'Audit Test 6 Failed: SHA-256 checksum must be deterministic and 64 hex characters'
   );
 
   return true;

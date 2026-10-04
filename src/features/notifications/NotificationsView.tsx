@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../../i18n/i18nContext';
 import { notificationRepo } from '../../data/sqlite/repositories';
+import { CommandService } from '../../domain/services/commandService';
 import { Notification } from '../../domain/types';
 import { maskNotification } from '../../domain/rules/confidentiality';
 import { Bell, CheckCheck, Clock, ShieldAlert } from 'lucide-react';
@@ -24,12 +25,12 @@ export const NotificationsView: React.FC = () => {
   }, [currentUser]);
 
   const handleMarkAllRead = async () => {
-    await notificationRepo.markAllAsRead(currentUser.role);
+    await CommandService.markAllNotificationsAsRead(currentUser.role, currentUser);
     await loadNotifications();
   };
 
   const handleMarkAsRead = async (id: string) => {
-    await notificationRepo.markAsRead(id);
+    await CommandService.markNotificationAsRead(id, currentUser);
     await loadNotifications();
   };
 

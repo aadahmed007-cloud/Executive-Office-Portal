@@ -25,6 +25,10 @@ export const QuickRoleSwitcher: React.FC = () => {
   const seconds = inactivitySecondsRemaining % 60;
   const isExpiringSoon = inactivitySecondsRemaining < 120; // less than 2 minutes
 
+  if (!currentUser) {
+    return null;
+  }
+
   return (
     <aside
       aria-label="شريط أمني وتنفيذي للجلسة"

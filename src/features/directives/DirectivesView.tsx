@@ -6,6 +6,7 @@ import {
   matterRepo,
   notificationRepo
 } from '../../data/sqlite/repositories';
+import { CommandService } from '../../domain/services/commandService';
 import { AuditLogger } from '../../domain/security/auditLogger';
 import { Directive, Matter } from '../../domain/types';
 import { analyzeOverdue } from '../../domain/rules/overdueLogic';
@@ -73,7 +74,7 @@ export const DirectivesView: React.FC = () => {
     e.preventDefault();
     const nextCode = await directiveRepo.getNextCode();
 
-    const created = await directiveRepo.create({
+    const created = await CommandService.createDirective({
       code: nextCode,
       title: newTitle,
       instruction: newInstruction,
@@ -88,23 +89,20 @@ export const DirectivesView: React.FC = () => {
       due_date: newDueDate,
       matter_id: newMatterId || null,
       created_by: currentUser.name
-    });
+    }, currentUser);
 
-    await AuditLogger.logDirectiveCreation(currentUser, created);
-
-    await notificationRepo.create({
+    await CommandService.createNotification({
       recipient_role: 'SECRETARY',
       title: `تكليف رئاسي جديد (${created.code})`,
       body: `أصدر السيد رئيس مجلس الإدارة تكليفاً جديداً بشأن: ${created.title}`,
       confidentiality: created.confidentiality,
       is_read: false
-    });
+    }, currentUser);
 
     setIsCreateModalOpen(false);
     setNewTitle('');
     setNewInstruction('');
     await loadData();
-    alert(`تم إصدار التكليف الرئاسي بنجاح برقم ${created.code}.`);
   };
 
   const filteredDirectives = directives.filter((d) => {

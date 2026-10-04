@@ -8,6 +8,7 @@ import {
   notificationRepo,
   matterRepo
 } from '../../data/sqlite/repositories';
+import { CommandService } from '../../domain/services/commandService';
 import {
   Correspondence,
   BriefingNote,
@@ -83,6 +84,7 @@ export const CorrespondenceDetailModal: React.FC<CorrespondenceDetailModalProps>
   const [background, setBackground] = useState('');
   const [secretaryRec, setSecretaryRec] = useState('');
   const [execOpinion, setExecOpinion] = useState('');
+  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
   // Approval Form State (Chairman)
   const [decisionType, setDecisionType] = useState<'approved' | 'rejected' | 'postponed' | 'referred'>('approved');
@@ -161,44 +163,30 @@ export const CorrespondenceDetailModal: React.FC<CorrespondenceDetailModalProps>
 
   // --- Handlers ---
   const handleSaveBriefingNote = async (presentToChairman: boolean = false) => {
-    await correspondenceRepo.saveBriefingNote({
+    await CommandService.saveBriefingNote({
       correspondence_id: correspondence.id,
       background,
       secretary_recommendation: secretaryRec,
       executive_opinion: execOpinion,
       prepared_by_name: currentUser.name,
       prepared_at: new Date().toISOString()
-    });
+    }, currentUser);
 
     const newStatus = presentToChairman ? 'presented_to_chairman' : 'briefing_prepared';
-    await correspondenceRepo.update(correspondence.id, { status: newStatus });
+    await CommandService.updateCorrespondence(correspondence.id, { status: newStatus }, currentUser);
     setCurrentStatus(newStatus);
 
-    await auditRepo.log({
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
-      action_type: 'UPDATE',
-      entity_type: 'BRIEFING_NOTE',
-      entity_id: correspondence.id,
-      before_value: `حالة المعاملة: ${currentStatus}`,
-      after_value: presentToChairman
-        ? `تقديم مذكرة العرض رسمياً لرئيس مجلس الإدارة على الخطاب ${correspondence.serial_number}`
-        : `حفظ مسودة مذكرة العرض للخطاب ${correspondence.serial_number}`,
-      ip_address: '10.120.4.x (LAN)'
-    });
-
     if (presentToChairman) {
-      await notificationRepo.create({
+      await CommandService.createNotification({
         recipient_role: 'CHAIRMAN',
         title: `مذكرة عرض جديدة جاهزة للتأشيرة (${correspondence.serial_number})`,
         body: `تم إعداد مذكرة العرض الخاصة بـ «${correspondence.subject}» وجاهزة لاتخاذ القرار.`,
         confidentiality: correspondence.confidentiality,
         is_read: false
-      });
-      alert('تم تقديم مذكرة العرض رسمياً على شاشة السيد رئيس مجلس الإدارة.');
+      }, currentUser);
+      setActionFeedback('تم تقديم مذكرة العرض رسمياً على شاشة السيد رئيس مجلس الإدارة.');
     } else {
-      alert('تم حفظ مذكرة العرض بنجاح.');
+      setActionFeedback('تم حفظ مسودة مذكرة العرض بنجاح.');
     }
 
     await loadData();
@@ -208,22 +196,22 @@ export const CorrespondenceDetailModal: React.FC<CorrespondenceDetailModalProps>
   const handleRecordEndorsement = async () => {
     const phraseText = `${standardPhrase}${customDirective ? ` - ${customDirective}` : ''}`;
 
-    await correspondenceRepo.recordApproval({
+    await CommandService.recordApproval({
       correspondence_id: correspondence.id,
       decision_type: decisionType,
       standard_phrase: standardPhrase,
       custom_directive: customDirective,
       decided_at: new Date().toISOString(),
       decided_by_name: currentUser.name
-    });
+    }, currentUser);
 
     const nextStatus = decisionType === 'approved' ? 'approved' : decisionType === 'rejected' ? 'rejected' : decisionType === 'postponed' ? 'postponed' : 'referred';
-    await correspondenceRepo.update(correspondence.id, { status: nextStatus });
+    await CommandService.updateCorrespondence(correspondence.id, { status: nextStatus }, currentUser);
     setCurrentStatus(nextStatus);
 
     // If referral, auto add routing entry & directive
     if (decisionType === 'referred' || (decisionType === 'approved' && customDirective)) {
-      await correspondenceRepo.addRouting({
+      await CommandService.addRouting({
         correspondence_id: correspondence.id,
         from_entity: 'مكتب رئيس مجلس الإدارة',
         to_department_id: 'dept-auto',
@@ -232,10 +220,10 @@ export const CorrespondenceDetailModal: React.FC<CorrespondenceDetailModalProps>
         deadline: referralDeadline,
         status: 'sent',
         routed_at: new Date().toISOString()
-      });
+      }, currentUser);
 
       const nextCode = await directiveRepo.getNextCode();
-      await directiveRepo.create({
+      await CommandService.createDirective({
         code: nextCode,
         title: `تكليف رئاسي بشأن: ${correspondence.subject}`,
         instruction: phraseText,
@@ -251,39 +239,27 @@ export const CorrespondenceDetailModal: React.FC<CorrespondenceDetailModalProps>
         due_date: referralDeadline,
         matter_id: correspondence.matter_id || null,
         created_by: currentUser.name
-      });
+      }, currentUser);
     }
 
-    await auditRepo.log({
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
-      action_type: 'DECIDE',
-      entity_type: 'CORRESPONDENCE',
-      entity_id: correspondence.id,
-      before_value: `الحالة: ${correspondence.status}`,
-      after_value: `تأشيرة رئيس مجلس الإدارة (${decisionType}): ${phraseText}`,
-      ip_address: '10.120.4.10 (المكتب الرئاسي)'
-    });
-
-    await notificationRepo.create({
+    await CommandService.createNotification({
       recipient_role: 'SECRETARY',
       title: `تأشيرة رئيس مجلس الإدارة على الخطاب ${correspondence.serial_number}`,
       body: `أصدر السيد رئيس المجلس تأشيرة: ${phraseText}`,
       confidentiality: correspondence.confidentiality,
       is_read: false
-    });
+    }, currentUser);
 
     await loadData();
     onUpdated();
-    alert('تم تثبيت تأشيرة السيد رئيس مجلس الإدارة في السجل الرسمي بنجاح.');
+    setActionFeedback('تم تثبيت تأشيرة السيد رئيس مجلس الإدارة في السجل الرسمي بنجاح.');
   };
 
   const handleAddRouting = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newRoutingAction) return;
 
-    await correspondenceRepo.addRouting({
+    await CommandService.addRouting({
       correspondence_id: correspondence.id,
       from_entity: 'مكتب رئيس مجلس الإدارة',
       to_department_id: 'dept-manual',
@@ -292,21 +268,10 @@ export const CorrespondenceDetailModal: React.FC<CorrespondenceDetailModalProps>
       deadline: newRoutingDeadline,
       status: 'sent',
       routed_at: new Date().toISOString()
-    });
-
-    await auditRepo.log({
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
-      action_type: 'ROUTING',
-      entity_type: 'CORRESPONDENCE_ROUTING',
-      entity_id: correspondence.id,
-      before_value: null,
-      after_value: `إحالة المعاملة إلى: ${newRoutingTo} بمهلة حتى ${newRoutingDeadline}`,
-      ip_address: '10.120.4.x (LAN)'
-    });
+    }, currentUser);
 
     setNewRoutingAction('');
+    setActionFeedback('تم تسجيل إحالة المعاملة بنجاح.');
     await loadData();
   };
 
@@ -314,7 +279,7 @@ export const CorrespondenceDetailModal: React.FC<CorrespondenceDetailModalProps>
     e.preventDefault();
     if (!newFileName) return;
 
-    await correspondenceRepo.addAttachment({
+    await CommandService.addAttachment({
       entity_type: 'correspondence',
       entity_id: correspondence.id,
       file_name: newFileName,
@@ -322,21 +287,10 @@ export const CorrespondenceDetailModal: React.FC<CorrespondenceDetailModalProps>
       mime_type: 'application/pdf',
       confidentiality: correspondence.confidentiality,
       uploaded_at: new Date().toISOString()
-    });
-
-    await auditRepo.log({
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
-      action_type: 'CREATE',
-      entity_type: 'ATTACHMENT',
-      entity_id: correspondence.id,
-      before_value: null,
-      after_value: `إرفاق مستند رسمي: ${newFileName} (${newFileSize} KB)`,
-      ip_address: '10.120.4.x (LAN)'
-    });
+    }, currentUser);
 
     setNewFileName('');
+    setActionFeedback('تم إرفاق المستند الرسمي بنجاح.');
     await loadData();
   };
 
@@ -345,18 +299,7 @@ export const CorrespondenceDetailModal: React.FC<CorrespondenceDetailModalProps>
     if (!trimmed || currentTags.includes(trimmed)) return;
     const updated = [...currentTags, trimmed];
     setCurrentTags(updated);
-    await correspondenceRepo.update(correspondence.id, { tags: updated });
-    await auditRepo.log({
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
-      action_type: 'UPDATE',
-      entity_type: 'CORRESPONDENCE',
-      entity_id: correspondence.id,
-      before_value: `الوسوم: ${currentTags.join(', ')}`,
-      after_value: `إضافة وسم للمعاملة [${correspondence.serial_number}]: #${trimmed}`,
-      ip_address: '10.120.4.x (LAN)'
-    });
+    await CommandService.updateCorrespondence(correspondence.id, { tags: updated }, currentUser);
     setTagInput('');
     onUpdated();
   };
@@ -364,18 +307,7 @@ export const CorrespondenceDetailModal: React.FC<CorrespondenceDetailModalProps>
   const handleRemoveTag = async (tagToRemove: string) => {
     const updated = currentTags.filter((t) => t !== tagToRemove);
     setCurrentTags(updated);
-    await correspondenceRepo.update(correspondence.id, { tags: updated });
-    await auditRepo.log({
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
-      action_type: 'UPDATE',
-      entity_type: 'CORRESPONDENCE',
-      entity_id: correspondence.id,
-      before_value: `الوسوم: ${currentTags.join(', ')}`,
-      after_value: `حذف وسم من المعاملة [${correspondence.serial_number}]: #${tagToRemove}`,
-      ip_address: '10.120.4.x (LAN)'
-    });
+    await CommandService.updateCorrespondence(correspondence.id, { tags: updated }, currentUser);
     onUpdated();
   };
 
@@ -448,6 +380,22 @@ export const CorrespondenceDetailModal: React.FC<CorrespondenceDetailModalProps>
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Action Feedback Toast */}
+        {actionFeedback && (
+          <div className="bg-emerald-50 border-b border-emerald-200 px-5 py-2.5 flex items-center justify-between text-xs text-emerald-800">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+              <span className="font-semibold">{actionFeedback}</span>
+            </div>
+            <button
+              onClick={() => setActionFeedback(null)}
+              className="text-emerald-600 hover:text-emerald-900 text-sm font-bold cursor-pointer"
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* Workflow State Progression Ribbon */}
         <div className="bg-slate-50 px-5 py-2.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">

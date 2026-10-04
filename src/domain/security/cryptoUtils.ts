@@ -81,6 +81,8 @@ export async function computeAuditEntryHash(entry: {
   return sha256Hex(payload);
 }
 
+export const GENESIS_BLOCK_HASH = 'GENESIS-BLOCK-00000000000000000000000000000000';
+
 export interface IntegrityVerificationResult {
   isValid: boolean;
   totalEntries: number;
@@ -91,7 +93,8 @@ export interface IntegrityVerificationResult {
 
 /**
  * Verifies the integrity of the audit log cryptographic chain.
- * Validates that each entry is hashed correctly and linked to its predecessor.
+ * Validates that the chain originates strictly from GENESIS_BLOCK_HASH,
+ * that each entry is hashed correctly, and strictly linked to its predecessor.
  */
 export async function verifyAuditLogIntegrity(entries: AuditLogEntry[]): Promise<IntegrityVerificationResult> {
   if (entries.length === 0) {
@@ -101,15 +104,21 @@ export async function verifyAuditLogIntegrity(entries: AuditLogEntry[]): Promise
   // Sort chronologically ascending
   const sorted = [...entries].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   
-  let expectedPrevHash: string | null = 'GENESIS-BLOCK-00000000000000000000000000000000';
+  let expectedPrevHash: string | null = GENESIS_BLOCK_HASH;
 
   for (let i = 0; i < sorted.length; i++) {
     const entry = sorted[i];
 
     // Check prev_hash matches
     if (i === 0) {
-      if (entry.prev_hash && entry.prev_hash !== expectedPrevHash) {
-        expectedPrevHash = entry.prev_hash;
+      if (entry.prev_hash !== GENESIS_BLOCK_HASH) {
+        return {
+          isValid: false,
+          totalEntries: sorted.length,
+          verifiedEntries: 0,
+          brokenEntryId: entry.id,
+          brokenReason: `انقطاع في أصل السجل (Genesis Block Violation): السجل الأول [${entry.id}] لا يرتبط بالهاش الأولي المعتمد`
+        };
       }
     } else {
       if (entry.prev_hash !== expectedPrevHash) {
