@@ -6,34 +6,46 @@
 export const INITIAL_USERS = [
   {
     id: 'usr-chairman',
-    name: 'السيد الأستاذ / طارق محمود الشناوي',
+    username: 'chairman',
+    name: 'رئيس مجلس الإدارة',
     title: 'رئيس مجلس إدارة الهيئة القومية للبريد',
     department_id: 'dept-exec',
-    email: 'chairman@egyptpost.gov.eg',
+    email: 'chairman@postal.internal',
     role: 'CHAIRMAN',
     can_view_confidential: 1,
+    password_hash: '6b496f7140d1cb0e808921d990d78bdf17dc74da9261d8a83bea08e342ba281b',
+    password_salt: 'a1b2c3d4e5f6789012345678abcdef01',
+    must_change_password: 0,
     avatar: 'chairman_avatar',
     created_at: '2026-01-01T08:00:00Z'
   },
   {
     id: 'usr-secretary',
-    name: 'الأستاذة / ميادة أحمد رضوان',
+    username: 'secretary',
+    name: 'السكرتير التنفيذي الأول',
     title: 'سكرتير أول مكتب رئيس مجلس الإدارة',
     department_id: 'dept-exec',
-    email: 'm.radwan@egyptpost.gov.eg',
+    email: 'secretary@postal.internal',
     role: 'SECRETARY',
     can_view_confidential: 1,
+    password_hash: 'd618d4152dae85a40139d99b28f12c8fa84734dfc5f41a23f0e03cfc96fd4246',
+    password_salt: 'b2c3d4e5f6a1789012345678abcdef02',
+    must_change_password: 1,
     avatar: 'secretary_avatar',
     created_at: '2026-01-01T08:00:00Z'
   },
   {
     id: 'usr-admin',
-    name: 'م. إسلام فؤاد النجار',
-    title: 'مسؤول النظم والشبكات المغلقة (IT)',
+    username: 'admin',
+    name: 'مسؤول النظم وتكنولوجيا المعلومات',
+    title: 'مسؤول النظم والشبكات (IT)',
     department_id: 'dept-it',
-    email: 'admin.lan@egyptpost.gov.eg',
+    email: 'admin@postal.internal',
     role: 'ADMIN',
     can_view_confidential: 0,
+    password_hash: 'f7e71e6b4a9d5a0c0d397f9949d1d35398a8930d3a30cb9f801047e6ddd4c1e3',
+    password_salt: 'c3d4e5f6a1b2789012345678abcdef03',
+    must_change_password: 0,
     avatar: 'admin_avatar',
     created_at: '2026-01-01T08:00:00Z'
   }
@@ -61,7 +73,7 @@ export const INITIAL_MATTERS = [
     priority: 'top_urgent',
     created_at: '2026-01-10T09:00:00Z',
     updated_at: '2026-09-20T11:00:00Z',
-    created_by: 'السيد الأستاذ / طارق محمود الشناوي'
+    created_by: 'رئيس مجلس الإدارة'
   },
   {
     id: 'matter-002',
@@ -74,7 +86,7 @@ export const INITIAL_MATTERS = [
     priority: 'urgent',
     created_at: '2026-02-01T10:00:00Z',
     updated_at: '2026-09-15T14:30:00Z',
-    created_by: 'السيد الأستاذ / طارق محمود الشناوي'
+    created_by: 'رئيس مجلس الإدارة'
   },
   {
     id: 'matter-003',
@@ -87,7 +99,7 @@ export const INITIAL_MATTERS = [
     priority: 'urgent',
     created_at: '2026-03-05T08:30:00Z',
     updated_at: '2026-09-28T16:00:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'matter-004',
@@ -100,7 +112,7 @@ export const INITIAL_MATTERS = [
     priority: 'top_urgent',
     created_at: '2026-04-12T11:00:00Z',
     updated_at: '2026-09-29T10:15:00Z',
-    created_by: 'السيد الأستاذ / طارق محمود الشناوي'
+    created_by: 'رئيس مجلس الإدارة'
   },
   {
     id: 'matter-005',
@@ -113,7 +125,7 @@ export const INITIAL_MATTERS = [
     priority: 'normal',
     created_at: '2026-05-18T12:00:00Z',
     updated_at: '2026-08-30T13:00:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   }
 ];
 
@@ -131,7 +143,7 @@ export const INITIAL_MEETINGS = [
     notes: 'استعراض الحساب الختامي لمشروعات حياة كريمة ومعدلات إنجاز المرحلة الثانية.',
     created_at: '2026-09-25T08:00:00Z',
     updated_at: '2026-09-25T08:00:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'meet-002',
@@ -146,7 +158,7 @@ export const INITIAL_MEETINGS = [
     notes: 'مناقشة تفعيل تحويلات إنستاباي لحسابات التوفير الجارية لعملاء البريد.',
     created_at: '2026-09-26T09:30:00Z',
     updated_at: '2026-09-26T09:30:00Z',
-    created_by: 'السيد الأستاذ / طارق محمود الشناوي'
+    created_by: 'رئيس مجلس الإدارة'
   },
   {
     id: 'meet-003',
@@ -161,7 +173,7 @@ export const INITIAL_MEETINGS = [
     notes: 'حضور مديري المناطق البريدية بالقاهرة الكبرى والإسكندرية.',
     created_at: '2026-09-28T10:00:00Z',
     updated_at: '2026-09-28T10:00:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'meet-004',
@@ -176,7 +188,7 @@ export const INITIAL_MEETINGS = [
     notes: 'مراجعة إجراءات تتبع الشحنات الدولية والمواد الخاضعة للرقابة النوعية.',
     created_at: '2026-09-29T14:00:00Z',
     updated_at: '2026-09-29T14:00:00Z',
-    created_by: 'السيد الأستاذ / طارق محمود الشناوي'
+    created_by: 'رئيس مجلس الإدارة'
   },
   {
     id: 'meet-005',
@@ -191,7 +203,7 @@ export const INITIAL_MEETINGS = [
     notes: 'بحضور استشاريي الجهاز القومي للتنسيق الحضاري وأساتذة الآثار الإسلامية.',
     created_at: '2026-09-30T11:00:00Z',
     updated_at: '2026-09-30T11:00:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'meet-006',
@@ -206,7 +218,7 @@ export const INITIAL_MEETINGS = [
     notes: 'مراجعة زمن التوصيل القياسي لخدمة "إكسبريس" بالمحافظات الحدودية.',
     created_at: '2026-10-01T08:30:00Z',
     updated_at: '2026-10-01T08:30:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'meet-007',
@@ -221,7 +233,7 @@ export const INITIAL_MEETINGS = [
     notes: 'بحضور رئيس قطاع الشؤون المالية ومدير عام المراجعة الداخلية.',
     created_at: '2026-10-01T09:00:00Z',
     updated_at: '2026-10-01T09:00:00Z',
-    created_by: 'السيد الأستاذ / طارق محمود الشناوي'
+    created_by: 'رئيس مجلس الإدارة'
   },
   {
     id: 'meet-008',
@@ -236,7 +248,7 @@ export const INITIAL_MEETINGS = [
     notes: 'توقيع أوامر الإسناد لتوريد 300 ماكينة صراف حديثة.',
     created_at: '2026-10-01T10:00:00Z',
     updated_at: '2026-10-01T10:00:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'meet-009',
@@ -251,7 +263,7 @@ export const INITIAL_MEETINGS = [
     notes: 'توقيع مذكرة تفاهم لتبادل البعائث السريعة بين مصر ودول حوض النيل.',
     created_at: '2026-10-01T12:00:00Z',
     updated_at: '2026-10-01T12:00:00Z',
-    created_by: 'السيد الأستاذ / طارق محمود الشناوي'
+    created_by: 'رئيس مجلس الإدارة'
   },
   {
     id: 'meet-010',
@@ -266,7 +278,7 @@ export const INITIAL_MEETINGS = [
     notes: 'مناقشة منظومة تقييم الأداء وربط الحوافز برضا العملاء.',
     created_at: '2026-10-02T08:00:00Z',
     updated_at: '2026-10-02T08:00:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   }
 ];
 
@@ -286,7 +298,7 @@ export const INITIAL_CORRESPONDENCE = [
     matter_id: 'matter-001',
     created_at: '2026-09-28T09:15:00Z',
     updated_at: '2026-09-29T10:00:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'corr-in-002',
@@ -302,7 +314,7 @@ export const INITIAL_CORRESPONDENCE = [
     matter_id: 'matter-002',
     created_at: '2026-09-28T11:00:00Z',
     updated_at: '2026-09-29T12:00:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'corr-in-003',
@@ -318,7 +330,7 @@ export const INITIAL_CORRESPONDENCE = [
     matter_id: 'matter-003',
     created_at: '2026-09-29T08:30:00Z',
     updated_at: '2026-09-29T14:00:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'corr-in-004',
@@ -334,7 +346,7 @@ export const INITIAL_CORRESPONDENCE = [
     matter_id: 'matter-004',
     created_at: '2026-09-29T13:00:00Z',
     updated_at: '2026-09-29T13:00:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'corr-in-005',
@@ -350,7 +362,7 @@ export const INITIAL_CORRESPONDENCE = [
     matter_id: 'matter-005',
     created_at: '2026-09-30T09:40:00Z',
     updated_at: '2026-09-30T11:20:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'corr-in-006',
@@ -366,7 +378,7 @@ export const INITIAL_CORRESPONDENCE = [
     matter_id: 'matter-004',
     created_at: '2026-09-30T12:15:00Z',
     updated_at: '2026-09-30T12:15:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'corr-in-007',
@@ -382,7 +394,7 @@ export const INITIAL_CORRESPONDENCE = [
     matter_id: null,
     created_at: '2026-10-01T08:45:00Z',
     updated_at: '2026-10-01T10:30:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'corr-in-008',
@@ -398,7 +410,7 @@ export const INITIAL_CORRESPONDENCE = [
     matter_id: 'matter-001',
     created_at: '2026-10-01T11:30:00Z',
     updated_at: '2026-10-01T11:30:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'corr-in-009',
@@ -414,7 +426,7 @@ export const INITIAL_CORRESPONDENCE = [
     matter_id: null,
     created_at: '2026-10-01T13:00:00Z',
     updated_at: '2026-10-01T13:00:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'corr-in-010',
@@ -430,7 +442,7 @@ export const INITIAL_CORRESPONDENCE = [
     matter_id: 'matter-003',
     created_at: '2026-10-02T08:15:00Z',
     updated_at: '2026-10-02T08:15:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'corr-in-011',
@@ -446,7 +458,7 @@ export const INITIAL_CORRESPONDENCE = [
     matter_id: 'matter-002',
     created_at: '2026-10-02T09:30:00Z',
     updated_at: '2026-10-02T09:30:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'corr-in-012',
@@ -462,7 +474,7 @@ export const INITIAL_CORRESPONDENCE = [
     matter_id: null,
     created_at: '2026-10-02T10:45:00Z',
     updated_at: '2026-10-02T10:45:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
 
   // 8 Outgoing letters
@@ -480,7 +492,7 @@ export const INITIAL_CORRESPONDENCE = [
     matter_id: 'matter-001',
     created_at: '2026-09-26T11:00:00Z',
     updated_at: '2026-09-27T14:00:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'corr-out-002',
@@ -496,7 +508,7 @@ export const INITIAL_CORRESPONDENCE = [
     matter_id: 'matter-002',
     created_at: '2026-09-27T15:30:00Z',
     updated_at: '2026-09-28T09:00:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'corr-out-003',
@@ -512,7 +524,7 @@ export const INITIAL_CORRESPONDENCE = [
     matter_id: 'matter-003',
     created_at: '2026-09-29T10:00:00Z',
     updated_at: '2026-09-29T16:00:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'corr-out-004',
@@ -528,7 +540,7 @@ export const INITIAL_CORRESPONDENCE = [
     matter_id: null,
     created_at: '2026-09-30T10:00:00Z',
     updated_at: '2026-09-30T14:30:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'corr-out-005',
@@ -544,7 +556,7 @@ export const INITIAL_CORRESPONDENCE = [
     matter_id: 'matter-001',
     created_at: '2026-10-01T12:00:00Z',
     updated_at: '2026-10-01T15:00:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'corr-out-006',
@@ -560,7 +572,7 @@ export const INITIAL_CORRESPONDENCE = [
     matter_id: null,
     created_at: '2026-10-01T14:00:00Z',
     updated_at: '2026-10-01T14:00:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'corr-out-007',
@@ -576,7 +588,7 @@ export const INITIAL_CORRESPONDENCE = [
     matter_id: 'matter-003',
     created_at: '2026-10-02T10:00:00Z',
     updated_at: '2026-10-02T10:00:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   },
   {
     id: 'corr-out-008',
@@ -592,7 +604,7 @@ export const INITIAL_CORRESPONDENCE = [
     matter_id: 'matter-004',
     created_at: '2026-10-02T11:30:00Z',
     updated_at: '2026-10-02T11:30:00Z',
-    created_by: 'الأستاذة / ميادة أحمد رضوان'
+    created_by: 'السكرتير التنفيذي الأول'
   }
 ];
 
@@ -603,7 +615,7 @@ export const INITIAL_BRIEFING_NOTES = [
     background: 'ورد خطاب معالي وزير الاتصالات وتكنولوجيا المعلومات بشأن الاستفسار عن الموقف التنفيذي النهائي لـ 42 مكتب بريد بقرى محافظة المنيا المشمولة بالمرحلة الأولى لمبادرة حياة كريمة، وذلك تمهيداً للجولة الميدانية الرئاسية المقررة خلال شهر أكتوبر.',
     secretary_recommendation: 'نقترح إحالة الموضوع بصفة عاجلة جداً إلى قطاع المشروعات الهندسية والدعم الفني بالتنسيق مع منطقة بريد المنيا، مع التكليف بموافاة مكتب السيد رئيس مجلس الإدارة ببيان دقيق بحالة الربط وتوافر ماكينات الصراف الآلي خلال 48 ساعة كحد أقصى.',
     executive_opinion: 'تم الانتهاء من الأعمال الإنشائية في 39 مكتباً، ويتبقى 3 مكاتب جارٍ إطلاق التيار الكهربائي بها بالتنسيق مع شركة توزيع كهرباء مصر الوسطى.',
-    prepared_by_name: 'الأستاذة / ميادة أحمد رضوان',
+    prepared_by_name: 'السكرتير التنفيذي الأول',
     prepared_at: '2026-09-28T10:30:00Z'
   },
   {
@@ -612,7 +624,7 @@ export const INITIAL_BRIEFING_NOTES = [
     background: 'إفادة رسمية من البنك المركزي المصري تتضمن الموافقة المشروطة على ربط المحافظ الإلكترونية للبريد المصري بشبكة المدفوعات اللحظية (IPN) وفق اشتراطات الأمن السيبراني المعتمدة.',
     secretary_recommendation: 'يُوصى باعتماد تشكيل لجنة فنية مشتركة برئاسة السيد نائب رئيس مجلس الإدارة للتحول الرقمي لسرعة إنهاء متطلبات الربط والاختبارات الأمنية خلال أسبوعين.',
     executive_opinion: 'خطوة استراتيجية ستزيد من الحصة السوقية لمعاملات البريد المصري الإلكترونية بنسبة لا تقل عن 25%.',
-    prepared_by_name: 'الأستاذة / ميادة أحمد رضوان',
+    prepared_by_name: 'السكرتير التنفيذي الأول',
     prepared_at: '2026-09-28T12:00:00Z'
   }
 ];
@@ -625,7 +637,7 @@ export const INITIAL_APPROVALS = [
     standard_phrase: 'موافق مع سرعة التنفيذ والتنسيق مع القطاع المالي',
     custom_directive: 'يُكلف رئيس قطاع تكنولوجيا المعلومات بمتابعة المتطلبات الأمنية مع البنك المركزي وموافاتي بتقرير أسبوعي منتظم.',
     decided_at: '2026-09-29T12:10:00Z',
-    decided_by_name: 'السيد الأستاذ / طارق محمود الشناوي'
+    decided_by_name: 'رئيس مجلس الإدارة'
   },
   {
     id: 'appr-002',
@@ -634,7 +646,7 @@ export const INITIAL_APPROVALS = [
     standard_phrase: 'يحال لقطاع العمليات والخدمات البريدية لاتخاذ اللازم',
     custom_directive: 'تشكيل غرفة عمليات مركزية لمتابعة سيولة المكاتب والتنسيق المباشر مع التأمينات.',
     decided_at: '2026-09-29T14:05:00Z',
-    decided_by_name: 'السيد الأستاذ / طارق محمود الشناوي'
+    decided_by_name: 'رئيس مجلس الإدارة'
   }
 ];
 
@@ -645,7 +657,7 @@ export const INITIAL_DIRECTIVES = [
     title: 'مراجعة الموقف التشغيلي لـ 42 مكتب بريد بقرى حياة كريمة بالمنيا',
     instruction: 'إجراء معاينة ميدانية وحصر شامل للجاهزية الفنية وإطلاق التيار الكهربائي وماكينات ATM ورفع تقرير نهائي.',
     assigned_department: 'إدارة المشروعات والأصول الهندسية',
-    assigned_person: 'م. أشرف عبد العزيز - مدير الإدارة الهندسية',
+    assigned_person: 'مدير عام الإدارة الهندسية',
     source_type: 'correspondence',
     source_id: 'corr-in-001',
     priority: 'top_urgent',
@@ -655,7 +667,7 @@ export const INITIAL_DIRECTIVES = [
     issued_at: '2026-09-29T10:30:00Z',
     due_date: '2026-10-04',
     matter_id: 'matter-001',
-    created_by: 'السيد الأستاذ / طارق محمود الشناوي',
+    created_by: 'رئيس مجلس الإدارة',
     updated_at: '2026-10-01T16:00:00Z'
   },
   {
@@ -664,7 +676,7 @@ export const INITIAL_DIRECTIVES = [
     title: 'استكمال اختبارات الأمن السيبراني لربط محافظ البريد بشبكة إنستاباي',
     instruction: 'التنسيق مع فريق الدعم الفني بالبنك المركزي واجتياز اختبارات الاختراق والاختبارات الوظيفية.',
     assigned_department: 'قطاع التحول الرقمي وتكنولوجيا المعلومات',
-    assigned_person: 'م. هاني كمال - مدير عام أمن المعلومات',
+    assigned_person: 'مدير عام أمن المعلومات',
     source_type: 'correspondence',
     source_id: 'corr-in-002',
     priority: 'urgent',
@@ -674,7 +686,7 @@ export const INITIAL_DIRECTIVES = [
     issued_at: '2026-09-29T12:30:00Z',
     due_date: '2026-10-15',
     matter_id: 'matter-002',
-    created_by: 'السيد الأستاذ / طارق محمود الشناوي',
+    created_by: 'رئيس مجلس الإدارة',
     updated_at: '2026-10-01T11:00:00Z'
   },
   {
@@ -683,7 +695,7 @@ export const INITIAL_DIRECTIVES = [
     title: 'تأمين الخزائن ومضاعفة سيولة صرف معاشات نوفمبر بمكاتب البريد الكبرى',
     instruction: 'وضع خطة تغذية نقدية مشددة والربط المباشر مع شركات نقل الأموال على مدار الساعة.',
     assigned_department: 'قطاع العمليات والخدمات البريدية',
-    assigned_person: 'الأستاذ / سامح جلال - رئيس قطاع العمليات',
+    assigned_person: 'رئيس قطاع العمليات',
     source_type: 'correspondence',
     source_id: 'corr-in-003',
     priority: 'top_urgent',
@@ -693,7 +705,7 @@ export const INITIAL_DIRECTIVES = [
     issued_at: '2026-09-29T14:15:00Z',
     due_date: '2026-10-25',
     matter_id: 'matter-003',
-    created_by: 'السيد الأستاذ / طارق محمود الشناوي',
+    created_by: 'رئيس مجلس الإدارة',
     updated_at: '2026-09-29T14:15:00Z'
   },
   {
@@ -702,7 +714,7 @@ export const INITIAL_DIRECTIVES = [
     title: 'تحديث كاميرات المراقبة وغرف التحكم بمراكز التبادل اللوجستي بمطار القاهرة',
     instruction: 'إحلال وتجديد نظام المراقبة التلفزيونية وربط أجهزة الإنذار مباشرة بالإدارة العامة للأمن.',
     assigned_department: 'الإدارة العامة للأمن ومراقبة الأصول',
-    assigned_person: 'اللواء / عادل منصور - مدير عام أمن الهيئة',
+    assigned_person: 'مدير عام أمن الهيئة',
     source_type: 'correspondence',
     source_id: 'corr-in-004',
     priority: 'top_urgent',
@@ -712,7 +724,7 @@ export const INITIAL_DIRECTIVES = [
     issued_at: '2026-09-29T15:00:00Z',
     due_date: '2026-10-20',
     matter_id: 'matter-004',
-    created_by: 'السيد الأستاذ / طارق محمود الشناوي',
+    created_by: 'رئيس مجلس الإدارة',
     updated_at: '2026-10-02T09:00:00Z'
   },
   {
@@ -721,7 +733,7 @@ export const INITIAL_DIRECTIVES = [
     title: 'إعداد الرد القانوني والمالي على ملاحظات الجهاز المركزي للمحاسبات',
     instruction: 'فحص بنود العجز المحاسبي وتجهيز المستندات المؤيدة للعرض على السيد رئيس المجلس.',
     assigned_department: 'قطاع التوفير والخدمات المالية',
-    assigned_person: 'الأستاذ / مدحت شكري - رئيس قطاع المالية',
+    assigned_person: 'رئيس قطاع الشؤون المالية',
     source_type: 'correspondence',
     source_id: 'corr-in-007',
     priority: 'urgent',
@@ -731,7 +743,7 @@ export const INITIAL_DIRECTIVES = [
     issued_at: '2026-10-01T11:00:00Z',
     due_date: '2026-10-08',
     matter_id: null,
-    created_by: 'السيد الأستاذ / طارق محمود الشناوي',
+    created_by: 'رئيس مجلس الإدارة',
     updated_at: '2026-10-01T11:00:00Z'
   },
   {
@@ -740,7 +752,7 @@ export const INITIAL_DIRECTIVES = [
     title: 'معاينة واستلام قطعة الأرض المخصصة لمركز بريد قنا الجديدة',
     instruction: 'التنسيق مع مسؤولي جهاز مدينة قنا الجديدة وعمل الرفع المساحي والجسات الترابية.',
     assigned_department: 'إدارة المشروعات والأصول الهندسية',
-    assigned_person: 'م. بهاء رفعت - الإدارة الهندسية بقنا',
+    assigned_person: 'مدير الإدارة الهندسية بالمنطقة الإقليمية',
     source_type: 'correspondence',
     source_id: 'corr-in-008',
     priority: 'normal',
@@ -750,7 +762,7 @@ export const INITIAL_DIRECTIVES = [
     issued_at: '2026-10-01T13:30:00Z',
     due_date: '2026-10-30',
     matter_id: 'matter-001',
-    created_by: 'السيد الأستاذ / طارق محمود الشناوي',
+    created_by: 'رئيس مجلس الإدارة',
     updated_at: '2026-10-01T13:30:00Z'
   },
   {
@@ -759,7 +771,7 @@ export const INITIAL_DIRECTIVES = [
     title: 'تجهيز الملف الفني وأوراق العمل للمؤتمر الاستراتيجي للاتحاد البريدي ببيرن',
     instruction: 'صياغة التقرير الإنجليزي النهائي متضمناً أرقام الشمول المالي والميكنة البريدية الحديثة.',
     assigned_department: 'مكتب رئيس مجلس الإدارة',
-    assigned_person: 'الأستاذة / ميادة أحمد رضوان - سكرتير أول',
+    assigned_person: 'السكرتير التنفيذي الأول',
     source_type: 'correspondence',
     source_id: 'corr-in-009',
     priority: 'normal',
@@ -769,7 +781,7 @@ export const INITIAL_DIRECTIVES = [
     issued_at: '2026-10-01T14:30:00Z',
     due_date: '2026-10-10',
     matter_id: null,
-    created_by: 'السيد الأستاذ / طارق محمود الشناوي',
+    created_by: 'رئيس مجلس الإدارة',
     updated_at: '2026-10-02T10:00:00Z'
   },
   {
@@ -778,7 +790,7 @@ export const INITIAL_DIRECTIVES = [
     title: 'إعداد تقرير حصر شاشات الإشارة بلغة الإشارة بمكاتب القاهرة والإسكندرية',
     instruction: 'حصر المكاتب التي ينقصها التجهيز الصوتي والمرئي لذوي الإعاقة لسرعة طرحها.',
     assigned_department: 'قطاع العمليات والخدمات البريدية',
-    assigned_person: 'الأستاذة / نجلاء فاروق - مدير إدارة خدمة العملاء',
+    assigned_person: 'مدير إدارة خدمة العملاء',
     source_type: 'correspondence',
     source_id: 'corr-in-012',
     priority: 'normal',
@@ -788,7 +800,7 @@ export const INITIAL_DIRECTIVES = [
     issued_at: '2026-10-02T11:00:00Z',
     due_date: '2026-10-22',
     matter_id: null,
-    created_by: 'السيد الأستاذ / طارق محمود الشناوي',
+    created_by: 'رئيس مجلس الإدارة',
     updated_at: '2026-10-02T11:00:00Z'
   },
   {
@@ -797,7 +809,7 @@ export const INITIAL_DIRECTIVES = [
     title: 'إتمام تسوية مستحقات الشركة المصرية لنقل البيانات عن الربع الثاني',
     instruction: 'مراجعة فواتير الدوائر الإلكترونية والإنترنت بالمكاتب وسداد المبالغ المعتمدة فوراً.',
     assigned_department: 'قطاع التوفير والخدمات المالية',
-    assigned_person: 'الأستاذ / عبد الرحمن توفيق - الحسابات المركزية',
+    assigned_person: 'مدير الحسابات المركزية',
     source_type: 'direct_instruction',
     priority: 'urgent',
     confidentiality: 'normal',
@@ -806,7 +818,7 @@ export const INITIAL_DIRECTIVES = [
     issued_at: '2026-09-15T09:00:00Z',
     due_date: '2026-09-30',
     matter_id: null,
-    created_by: 'السيد الأستاذ / طارق محمود الشناوي',
+    created_by: 'رئيس مجلس الإدارة',
     updated_at: '2026-09-30T15:00:00Z'
   },
   {
@@ -815,7 +827,7 @@ export const INITIAL_DIRECTIVES = [
     title: 'استكمال تركيب وتشغيل 150 ماكينة صراف آلي بالمحافظات الساحلية',
     instruction: 'سرعة إنهاء أعمال الصب الخرساني وكبائن الحماية لماكينات الصراف الآلي الخارجية.',
     assigned_department: 'إدارة المشروعات والأصول الهندسية',
-    assigned_person: 'م. أحمد والي - المشروعات الساحلية',
+    assigned_person: 'مسؤول المشروعات بالمنطقة الساحلية',
     source_type: 'meeting',
     source_id: 'meet-001',
     priority: 'urgent',
@@ -825,7 +837,7 @@ export const INITIAL_DIRECTIVES = [
     issued_at: '2026-09-01T10:00:00Z',
     due_date: '2026-09-28', // Past date
     matter_id: 'matter-001',
-    created_by: 'السيد الأستاذ / طارق محمود الشناوي',
+    created_by: 'رئيس مجلس الإدارة',
     updated_at: '2026-09-29T08:00:00Z'
   },
   {
@@ -834,7 +846,7 @@ export const INITIAL_DIRECTIVES = [
     title: 'تطوير تطبيق الهاتف المحمول الخاص بسعاة البريد (Postal Mobile PDA)',
     instruction: 'إضافة خاصية التوقيع البيومتري وتصوير الإخطارات البريدية المسجلة عند التسليم.',
     assigned_department: 'قطاع التحول الرقمي وتكنولوجيا المعلومات',
-    assigned_person: 'م. عمرو الديب - مدير تطوير التطبيقات',
+    assigned_person: 'مدير إدارة تطوير التطبيقات',
     source_type: 'direct_instruction',
     priority: 'urgent',
     confidentiality: 'normal',
@@ -843,7 +855,7 @@ export const INITIAL_DIRECTIVES = [
     issued_at: '2026-09-10T11:00:00Z',
     due_date: '2026-10-06', // Due soon (within 48h)
     matter_id: 'matter-002',
-    created_by: 'السيد الأستاذ / طارق محمود الشناوي',
+    created_by: 'رئيس مجلس الإدارة',
     updated_at: '2026-10-01T13:00:00Z'
   },
   {
@@ -852,7 +864,7 @@ export const INITIAL_DIRECTIVES = [
     title: 'حصر النزاعات القضائية المتعلقة بأراضي الهيئة الفضاء بالمحافظات',
     instruction: 'إعداد جدول تفصيلي بالقضايا المتداولة ومواعيد الجلسات وتكليف محامي الهيئة بالحضور.',
     assigned_department: 'الإدارة العامة للشؤون القانونية والتحقيقات',
-    assigned_person: 'المستشار / عصام الغمري - نائب مدير الشؤون القانونية',
+    assigned_person: 'نائب مدير عام الشؤون القانونية',
     source_type: 'direct_instruction',
     priority: 'normal',
     confidentiality: 'confidential',
@@ -861,7 +873,7 @@ export const INITIAL_DIRECTIVES = [
     issued_at: '2026-09-18T12:00:00Z',
     due_date: '2026-10-18',
     matter_id: null,
-    created_by: 'السيد الأستاذ / طارق محمود الشناوي',
+    created_by: 'رئيس مجلس الإدارة',
     updated_at: '2026-09-28T14:00:00Z'
   },
   {
@@ -880,7 +892,7 @@ export const INITIAL_DIRECTIVES = [
     issued_at: '2026-09-05T09:00:00Z',
     due_date: '2026-09-25',
     matter_id: 'matter-002',
-    created_by: 'السيد الأستاذ / طارق محمود الشناوي',
+    created_by: 'رئيس مجلس الإدارة',
     updated_at: '2026-09-25T16:00:00Z'
   },
   {
@@ -898,7 +910,7 @@ export const INITIAL_DIRECTIVES = [
     issued_at: '2026-10-01T09:00:00Z',
     due_date: '2026-10-03', // Urgent / due soon
     matter_id: null,
-    created_by: 'السيد الأستاذ / طارق محمود الشناوي',
+    created_by: 'رئيس مجلس الإدارة',
     updated_at: '2026-10-02T11:00:00Z'
   },
   {
@@ -907,7 +919,7 @@ export const INITIAL_DIRECTIVES = [
     title: 'مراجعة خطة الصيانة السنوية لأجهزة التكييف المركزي والمصاعد بالمبنى الرئيسي',
     instruction: 'التأكد من التزام الشركة المنفذة ببنود العقد وتوفير قطع الغيار الأصلية قبل فصل الصيف.',
     assigned_department: 'إدارة المشروعات والأصول الهندسية',
-    assigned_person: 'م. طاهر القاضي - الصيانة والتشغيل',
+    assigned_person: 'مسؤول الصيانة والتشغيل',
     source_type: 'direct_instruction',
     priority: 'normal',
     confidentiality: 'normal',
@@ -916,7 +928,7 @@ export const INITIAL_DIRECTIVES = [
     issued_at: '2026-08-15T10:00:00Z',
     due_date: '2026-09-15',
     matter_id: null,
-    created_by: 'الأستاذة / ميادة أحمد رضوان',
+    created_by: 'السكرتير التنفيذي الأول',
     updated_at: '2026-09-16T12:00:00Z'
   }
 ];
@@ -924,88 +936,88 @@ export const INITIAL_DIRECTIVES = [
 export const INITIAL_CONTACTS = [
   {
     id: 'cont-001',
-    name: 'الدكتور / عمرو طلعت',
+    name: 'مكتب وزير الاتصالات وتكنولوجيا المعلومات',
     entity: 'وزارة الاتصالات وتكنولوجيا المعلومات',
-    position: 'وزير الاتصالات وتكنولوجيا المعلومات',
+    position: 'مدير مكتب الوزير',
     phone: '02-35341000',
-    email: 'minister.office@mcit.gov.eg',
+    email: 'minister.office@telecom.internal',
     category: 'ministry',
     notes: 'التواصل المباشر عبر السكرتارية الخاصة لمعالي الوزير.',
     created_at: '2026-01-01T08:00:00Z'
   },
   {
     id: 'cont-002',
-    name: 'الأستاذ / حسن عبد الله',
+    name: 'مكتب محافظ البنك المركزي',
     entity: 'البنك المركزي المصري',
-    position: 'محافظ البنك المركزي المصري',
+    position: 'مدير مكتب المحافظ',
     phone: '02-27702000',
-    email: 'governor.office@cbe.org.eg',
+    email: 'governor.office@centralbank.internal',
     category: 'central_bank',
     notes: 'ملف التنسيق النقدي والمدفوعات اللحظية IPN والشمول المالي.',
     created_at: '2026-01-05T09:00:00Z'
   },
   {
     id: 'cont-003',
-    name: 'اللواء / جمال عوض',
+    name: 'رئاسة هيئة التأمينات الاجتماعية',
     entity: 'الهيئة القومية للتأمين الاجتماعي',
-    position: 'رئيس مجلس إدارة الهيئة',
+    position: 'مكتب رئيس الهيئة',
     phone: '02-25911400',
-    email: 'chairman@nosi.gov.eg',
+    email: 'contact@socialins.internal',
     category: 'postal_administration',
     notes: 'ملف منظومة صرف المعاشات الشهرية بالمكاتب والتطبيقات الرقمية.',
     created_at: '2026-01-10T10:00:00Z'
   },
   {
     id: 'cont-004',
-    name: 'الدكتورة / مايا مرسي',
+    name: 'مكتب وزيرة التضامن الاجتماعي',
     entity: 'وزارة التضامن الاجتماعي',
-    position: 'وزيرة التضامن الاجتماعي',
+    position: 'مدير مكتب الوزيرة',
     phone: '02-37617000',
-    email: 'minister.office@moss.gov.eg',
+    email: 'contact@socialaffairs.internal',
     category: 'ministry',
     notes: 'بروتوكول تكافل وكرامة وخدمات الإتاحة لذوي الاحتياجات الخاصة.',
     created_at: '2026-01-15T11:00:00Z'
   },
   {
     id: 'cont-005',
-    name: 'السيد / ماساهيكو ميتوكي (Masahiko Metoki)',
-    entity: 'اتحاد البريد العالمي (UPU) - سويسرا',
-    position: 'المدير العام للاتحاد البريدي العالمي',
+    name: 'الأمانة العامة للاتحاد البريدي الدولي',
+    entity: 'اتحاد البريد العالمي (UPU)',
+    position: 'الأمين العام للاتحاد البريدي',
     phone: '+41-31-350-3111',
-    email: 'director.general@upu.int',
+    email: 'secretariat@postal-union.internal',
     category: 'postal_administration',
-    notes: 'المراسلات والتمثيل الدولي لمصر في المنظمات الأممية المتخصصة.',
+    notes: 'المراسلات والتمثيل الدولي في المنظمات البريدية المتخصصة.',
     created_at: '2026-02-01T08:00:00Z'
   },
   {
     id: 'cont-006',
-    name: 'المستشار / هشام بدوي',
+    name: 'رئاسة الجهاز الرقابي للمحاسبات',
     entity: 'الجهاز المركزي للمحاسبات',
-    position: 'رئيس الجهاز المركزي للمحاسبات',
+    position: 'مدير الاتصال الرقابي',
     phone: '02-24017000',
-    email: 'president.office@cao.gov.eg',
+    email: 'liaison@audit.internal',
     category: 'other',
     notes: 'تقارير فحص الحسابات الختامية والملاحظات الرقابية الدورية.',
     created_at: '2026-02-15T09:30:00Z'
   },
   {
     id: 'cont-007',
-    name: 'م. أحمد الظاهر',
-    entity: 'هيئة تنمية صناعة تكنولوجيا المعلومات (إيتيدا)',
-    position: 'الرئيس التنفيذي للهيئة',
+    name: 'إدارة تكنولوجيا المعلومات الشريكة',
+    entity: 'هيئة تنمية صناعة تكنولوجيا المعلومات',
+    position: 'الرئيس التنفيذي للهيئة الشريكة',
     phone: '02-35345000',
-    email: 'ceo.office@itida.gov.eg',
+    email: 'contact@techdev.internal',
     category: 'ministry',
     notes: 'ملف التوقيع الإلكتروني وتطوير الشركات الناشئة وحاضنات الأعمال.',
     created_at: '2026-03-01T10:00:00Z'
   },
   {
     id: 'cont-008',
-    name: 'اللواء / خالد فودة',
-    entity: 'محافظة قنا',
-    position: 'محافظ قنا',
+    name: 'مكتب المحافظ الإقليمي',
+    entity: 'ديوان عام المحافظة الإقليمية',
+    position: 'مدير مكتب المحافظ',
     phone: '096-3210000',
-    email: 'governor.office@qena.gov.eg',
+    email: 'governor.office@regional.internal',
     category: 'other',
     notes: 'تخصيص أراضي المشروعات الخدمية والبريدية ومبادرة حياة كريمة بالمحافظة.',
     created_at: '2026-03-10T11:00:00Z'
@@ -1016,7 +1028,7 @@ export const INITIAL_AUDIT_LOG = [
   {
     id: 'audit-001',
     user_id: 'usr-secretary',
-    user_name: 'الأستاذة / ميادة أحمد رضوان',
+    user_name: 'السكرتير التنفيذي الأول',
     user_role: 'SECRETARY',
     action_type: 'CREATE',
     entity_type: 'CORRESPONDENCE',
@@ -1024,12 +1036,14 @@ export const INITIAL_AUDIT_LOG = [
     before_value: null,
     after_value: 'تسجيل خطاب وارد رقم IN-2026-0001 وارد من وزارة الاتصالات بخصوص حياة كريمة',
     timestamp: '2026-09-28T09:15:00Z',
-    ip_address: '10.120.4.15 (LAN)'
+    ip_address: '<LAN_CLIENT_IP>',
+    prev_hash: 'GENESIS-BLOCK-00000000000000000000000000000000',
+    entry_hash: '26ba31099933888f8f2857ced7b8be3e0c41e261316760b64d2c524a6d33d9dc'
   },
   {
     id: 'audit-002',
     user_id: 'usr-secretary',
-    user_name: 'الأستاذة / ميادة أحمد رضوان',
+    user_name: 'السكرتير التنفيذي الأول',
     user_role: 'SECRETARY',
     action_type: 'UPDATE',
     entity_type: 'BRIEFING_NOTE',
@@ -1037,12 +1051,14 @@ export const INITIAL_AUDIT_LOG = [
     before_value: null,
     after_value: 'صياغة مذكرة العرض الخاصة بالخطاب IN-2026-0001 تمهيداً لتقديمها للرئيس',
     timestamp: '2026-09-28T10:30:00Z',
-    ip_address: '10.120.4.15 (LAN)'
+    ip_address: '<LAN_CLIENT_IP>',
+    prev_hash: '26ba31099933888f8f2857ced7b8be3e0c41e261316760b64d2c524a6d33d9dc',
+    entry_hash: '4190b40aeda2fef4987b3a0851e7bc430c900130aef805cdc32ecc598dcfae12'
   },
   {
     id: 'audit-003',
     user_id: 'usr-chairman',
-    user_name: 'السيد الأستاذ / طارق محمود الشناوي',
+    user_name: 'رئيس مجلس الإدارة',
     user_role: 'CHAIRMAN',
     action_type: 'DECIDE',
     entity_type: 'CORRESPONDENCE',
@@ -1050,12 +1066,14 @@ export const INITIAL_AUDIT_LOG = [
     before_value: 'الحالة: معروض على الرئيس',
     after_value: 'تأشيرة اعتماد: موافق مع سرعة التنفيذ والتنسيق مع القطاع المالي',
     timestamp: '2026-09-29T12:10:00Z',
-    ip_address: '10.120.4.10 (LAN - المكتب الرئاسي)'
+    ip_address: '<LAN_CLIENT_IP>',
+    prev_hash: '4190b40aeda2fef4987b3a0851e7bc430c900130aef805cdc32ecc598dcfae12',
+    entry_hash: 'cf19ff991de29312837d59213d4f7ce0f09271b482eef1fa57db24bfcbbfa7b1'
   },
   {
     id: 'audit-004',
     user_id: 'usr-chairman',
-    user_name: 'السيد الأستاذ / طارق محمود الشناوي',
+    user_name: 'رئيس مجلس الإدارة',
     user_role: 'CHAIRMAN',
     action_type: 'CREATE',
     entity_type: 'DIRECTIVE',
@@ -1063,7 +1081,9 @@ export const INITIAL_AUDIT_LOG = [
     before_value: null,
     after_value: 'إصدار التكليف DIR-2026-0002 لقطاع التحول الرقمي بشأن إنستاباي',
     timestamp: '2026-09-29T12:30:00Z',
-    ip_address: '10.120.4.10 (LAN - المكتب الرئاسي)'
+    ip_address: '<LAN_CLIENT_IP>',
+    prev_hash: 'cf19ff991de29312837d59213d4f7ce0f09271b482eef1fa57db24bfcbbfa7b1',
+    entry_hash: '0e193ac21e570235617ceed84bc60fa061de11054a13d4e066484e522eb81031'
   }
 ];
 
@@ -1071,7 +1091,7 @@ export const INITIAL_MEETING_ATTENDEES = [
   {
     id: 'att-001',
     meeting_id: 'meet-001',
-    name: 'السيد الأستاذ / طارق محمود الشناوي',
+    name: 'رئيس مجلس الإدارة',
     title: 'رئيس مجلس الإدارة (رئيس الجلسة)',
     entity: 'الهيئة القومية للبريد',
     is_external: 0,
@@ -1080,7 +1100,7 @@ export const INITIAL_MEETING_ATTENDEES = [
   {
     id: 'att-002',
     meeting_id: 'meet-001',
-    name: 'الأستاذ / مدحت شكري',
+    name: 'رئيس قطاع الشؤون المالية',
     title: 'رئيس قطاع الشؤون المالية والتوفير',
     entity: 'الهيئة القومية للبريد',
     is_external: 0,
@@ -1089,7 +1109,7 @@ export const INITIAL_MEETING_ATTENDEES = [
   {
     id: 'att-003',
     meeting_id: 'meet-001',
-    name: 'م. أشرف عبد العزيز',
+    name: 'مدير عام الإدارة الهندسية',
     title: 'مدير عام الإدارة الهندسية والمشروعات',
     entity: 'الهيئة القومية للبريد',
     is_external: 0,
@@ -1098,7 +1118,7 @@ export const INITIAL_MEETING_ATTENDEES = [
   {
     id: 'att-004',
     meeting_id: 'meet-001',
-    name: 'الأستاذة / ميادة أحمد رضوان',
+    name: 'السكرتير التنفيذي الأول',
     title: 'سكرتير أول مكتب رئيس المجلس (أمين السر)',
     entity: 'مكتب رئيس مجلس الإدارة',
     is_external: 0,
@@ -1107,7 +1127,7 @@ export const INITIAL_MEETING_ATTENDEES = [
   {
     id: 'att-005',
     meeting_id: 'meet-002',
-    name: 'الأستاذ / حسن عبد الله',
+    name: 'محافظ البنك المركزي',
     title: 'محافظ البنك المركزي المصري',
     entity: 'البنك المركزي المصري',
     is_external: 1,
@@ -1116,7 +1136,7 @@ export const INITIAL_MEETING_ATTENDEES = [
   {
     id: 'att-006',
     meeting_id: 'meet-002',
-    name: 'م. إيهاب نصر',
+    name: 'وكيل محافظ البنك المركزي لنظم الدفع',
     title: 'وكيل محافظ البنك المركزي لنظم الدفع',
     entity: 'البنك المركزي المصري',
     is_external: 1,
@@ -1132,7 +1152,7 @@ export const INITIAL_AGENDA_ITEMS = [
     title: 'التصديق على محضر الجلسة السابقة ومتابعة تنفيذ القرارات الصادرة',
     description: 'مراجعة الموقف التنفيذي لـ 6 قرارات صادرة بالجلسة السابقة وما تم إنجازه.',
     duration_minutes: 20,
-    presenter: 'الأستاذة / ميادة أحمد رضوان - أمين سر المجلس'
+    presenter: 'السكرتير التنفيذي الأول - أمين سر المجلس'
   },
   {
     id: 'agenda-002',
@@ -1141,7 +1161,7 @@ export const INITIAL_AGENDA_ITEMS = [
     title: 'عرض تقرير المؤشرات المالية وحصيلة أوعية التوفير للربع الثالث 2026',
     description: 'استعراض الحسابات الختامية ونمو الودائع والأرباح التشغيلية الاستثمارية للهيئة.',
     duration_minutes: 45,
-    presenter: 'الأستاذ / مدحت شكري - رئيس قطاع المالية'
+    presenter: 'رئيس قطاع الشؤون المالية'
   },
   {
     id: 'agenda-003',
@@ -1150,7 +1170,7 @@ export const INITIAL_AGENDA_ITEMS = [
     title: 'الموقف التنفيذي لمكاتب بريد المرحلة الأولى من مبادرة حياة كريمة',
     description: 'عرض خطة افتتاح 385 مكتباً مطوراً وجاهزية ماكينات الصراف الآلي والربط الشبكي.',
     duration_minutes: 40,
-    presenter: 'م. أشرف عبد العزيز - قطاع المشروعات الهندسية'
+    presenter: 'مدير عام الإدارة الهندسية'
   },
   {
     id: 'agenda-004',
@@ -1159,7 +1179,7 @@ export const INITIAL_AGENDA_ITEMS = [
     title: 'ما يُستجد من أعمال والقرارات الختامية',
     description: 'التوجيهات الرئاسية العاجلة ومواعيد انعقاد اللجان النوعية المنبثقة.',
     duration_minutes: 15,
-    presenter: 'السيد الأستاذ / طارق محمود الشناوي - رئيس مجلس الإدارة'
+    presenter: 'رئيس مجلس الإدارة'
   }
 ];
 
@@ -1167,10 +1187,10 @@ export const INITIAL_MEETING_MINUTES = [
   {
     id: 'min-001',
     meeting_id: 'meet-001',
-    draft_content: 'عُقد الاجتماع برئاسة السيد الأستاذ طارق محمود الشناوي، رئيس مجلس الإدارة، وتم استعراض جدول الأعمال. وقد أشاد المجلس بمعدلات إنجاز مشروعات حياة كريمة وشدد على ضرورة الانتهاء من كافة أعمال الربط الكهربائي والميكنة بالمحافظات قبل نهاية الشهر الجاري، مع تعزيز السيولة النقدية استعداداً لصرف المعاشات.',
-    approved_content: 'اعتُمد المحضر رسمياً من السيد رئيس مجلس الإدارة بجلسته المنعقدة، مع التكليف الفوري للقطاع المالي وقطاع المشروعات بتنفيذ القرارات الموضحة أدناه.',
+    draft_content: 'عُقد الاجتماع برئاسة رئيس مجلس الإدارة، وتم استعراض جدول الأعمال. وقد أشاد المجلس بمعدلات إنجاز مشروعات حياة كريمة وشدد على ضرورة الانتهاء من كافة أعمال الربط الكهربائي والميكنة بالمحافظات قبل نهاية الشهر الجاري، مع تعزيز السيولة النقدية استعداداً لصرف المعاشات.',
+    approved_content: 'اعتُمد المحضر رسمياً من رئيس مجلس الإدارة بجلسته المنعقدة، مع التكليف الفوري للقطاع المالي وقطاع المشروعات بتنفيذ القرارات الموضحة أدناه.',
     status: 'draft',
-    approved_by: 'السيد الأستاذ / طارق محمود الشناوي',
+    approved_by: 'رئيس مجلس الإدارة',
     approved_at: '2026-10-01T15:00:00Z'
   }
 ];
@@ -1182,7 +1202,7 @@ export const INITIAL_DECISIONS = [
     order_index: 1,
     content: 'اعتماد خطة التغذية النقدية الإضافية لماكينات الصراف الآلي بالقرى وتوفير سيولة عاجلة بقيمة 500 مليون جنيه.',
     assigned_department_id: 'dept-fin',
-    assigned_to_name: 'الأستاذ / مدحت شكري - رئيس قطاع المالية',
+    assigned_to_name: 'رئيس قطاع الشؤون المالية',
     due_date: '2026-10-10',
     directive_id: null,
     status: 'in_progress'
@@ -1193,7 +1213,7 @@ export const INITIAL_DECISIONS = [
     order_index: 2,
     content: 'سرعة إنهاء إطلاق التيار الكهربائي لـ 3 مكاتب بريد متبقية بالمنيا بالتنسيق مع وزارة الكهرباء.',
     assigned_department_id: 'dept-prop',
-    assigned_to_name: 'م. أشرف عبد العزيز - مدير الإدارة الهندسية',
+    assigned_to_name: 'مدير عام الإدارة الهندسية',
     due_date: '2026-10-06',
     directive_id: 'dir-001',
     status: 'in_progress'

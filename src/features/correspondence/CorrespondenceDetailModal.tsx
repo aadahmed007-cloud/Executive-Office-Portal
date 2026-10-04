@@ -33,8 +33,23 @@ import {
   Paperclip,
   Check,
   FolderGit2,
-  ArrowRight
+  ArrowRight,
+  ShieldAlert,
+  Tag,
+  Layers,
+  Plus
 } from 'lucide-react';
+
+const PRESET_QUICK_TAGS = [
+  'عاجل جداً',
+  'سري للغاية',
+  'روتيني / عادي',
+  'متابعة مجلس الوزراء',
+  'جلسة مجلس الإدارة',
+  'مهلة حرجة 48 ساعة',
+  'جاهز للتأشيرة',
+  'خطة استثمارية'
+];
 
 interface CorrespondenceDetailModalProps {
   correspondence: Correspondence;
@@ -60,6 +75,9 @@ export const CorrespondenceDetailModal: React.FC<CorrespondenceDetailModalProps>
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [linkedMatter, setLinkedMatter] = useState<Matter | null>(null);
   const [currentStatus, setCurrentStatus] = useState(correspondence.status);
+  const [currentTags, setCurrentTags] = useState<string[]>(correspondence.tags || []);
+  const [currentCategory, setCurrentCategory] = useState<string>(correspondence.category || 'operations');
+  const [tagInput, setTagInput] = useState('');
 
   // Briefing Form State
   const [background, setBackground] = useState('');
@@ -86,11 +104,12 @@ export const CorrespondenceDetailModal: React.FC<CorrespondenceDetailModalProps>
   const isSecretary = currentUser.role === 'SECRETARY';
 
   const loadData = async () => {
+    const userCtx = { can_view_confidential: currentUser.can_view_confidential, role: currentUser.role, userId: currentUser.id };
     const [note, appr, routList, attList] = await Promise.all([
-      correspondenceRepo.getBriefingNote(correspondence.id),
-      correspondenceRepo.getApproval(correspondence.id),
-      correspondenceRepo.getRoutings(correspondence.id),
-      correspondenceRepo.getAttachments(correspondence.id)
+      correspondenceRepo.getBriefingNote(correspondence.id, userCtx),
+      correspondenceRepo.getApproval(correspondence.id, userCtx),
+      correspondenceRepo.getRoutings(correspondence.id, userCtx),
+      correspondenceRepo.getAttachments(correspondence.id, userCtx)
     ]);
 
     setBriefingNote(note);
@@ -105,7 +124,7 @@ export const CorrespondenceDetailModal: React.FC<CorrespondenceDetailModalProps>
     }
 
     if (correspondence.matter_id) {
-      matterRepo.getById(correspondence.matter_id).then((m) => setLinkedMatter(m));
+      matterRepo.getById(correspondence.matter_id, userCtx).then((m) => setLinkedMatter(m));
     }
   };
 
@@ -117,6 +136,28 @@ export const CorrespondenceDetailModal: React.FC<CorrespondenceDetailModalProps>
   }, [isOpen, correspondence.id]);
 
   if (!isOpen) return null;
+
+  if (correspondence.confidentiality !== 'normal' && !currentUser.can_view_confidential) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4" dir="rtl">
+        <div className="bg-white rounded-3xl p-6 max-w-md w-full text-center space-y-4 shadow-2xl border border-rose-200">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-900">غير مصرح بالاطلاع</h3>
+          <p className="text-xs text-slate-600">
+            هذه المعاملة مصنفة بدرجة سرية تتطلب تصريحاً أمنياً معتمداً من مكتب رئيس مجلس الإدارة.
+          </p>
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 bg-slate-900 text-white rounded-xl font-bold text-xs hover:bg-slate-800 transition cursor-pointer"
+          >
+            إغلاق
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // --- Handlers ---
   const handleSaveBriefingNote = async (presentToChairman: boolean = false) => {
@@ -299,6 +340,65 @@ export const CorrespondenceDetailModal: React.FC<CorrespondenceDetailModalProps>
     await loadData();
   };
 
+  const handleAddTag = async (tagText: string) => {
+    const trimmed = tagText.trim();
+    if (!trimmed || currentTags.includes(trimmed)) return;
+    const updated = [...currentTags, trimmed];
+    setCurrentTags(updated);
+    await correspondenceRepo.update(correspondence.id, { tags: updated });
+    await auditRepo.log({
+      user_id: currentUser.id,
+      user_name: currentUser.name,
+      user_role: currentUser.role,
+      action_type: 'UPDATE',
+      entity_type: 'CORRESPONDENCE',
+      entity_id: correspondence.id,
+      before_value: `الوسوم: ${currentTags.join(', ')}`,
+      after_value: `إضافة وسم للمعاملة [${correspondence.serial_number}]: #${trimmed}`,
+      ip_address: '10.120.4.x (LAN)'
+    });
+    setTagInput('');
+    onUpdated();
+  };
+
+  const handleRemoveTag = async (tagToRemove: string) => {
+    const updated = currentTags.filter((t) => t !== tagToRemove);
+    setCurrentTags(updated);
+    await correspondenceRepo.update(correspondence.id, { tags: updated });
+    await auditRepo.log({
+      user_id: currentUser.id,
+      user_name: currentUser.name,
+      user_role: currentUser.role,
+      action_type: 'UPDATE',
+      entity_type: 'CORRESPONDENCE',
+      entity_id: correspondence.id,
+      before_value: `الوسوم: ${currentTags.join(', ')}`,
+      after_value: `حذف وسم من المعاملة [${correspondence.serial_number}]: #${tagToRemove}`,
+      ip_address: '10.120.4.x (LAN)'
+    });
+    onUpdated();
+  };
+
+  const getCategoryName = (cat?: string) => {
+    switch (cat) {
+      case 'financial':
+        return t('correspondence_module.category_financial');
+      case 'legal':
+        return t('correspondence_module.category_legal');
+      case 'technology':
+        return t('correspondence_module.category_technology');
+      case 'sovereign':
+        return t('correspondence_module.category_sovereign');
+      case 'projects':
+        return t('correspondence_module.category_projects');
+      case 'citizens':
+        return t('correspondence_module.category_citizens');
+      case 'operations':
+      default:
+        return t('correspondence_module.category_operations');
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-3 sm:p-5 overflow-y-auto">
       <div className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden text-right flex flex-col max-h-[90vh]">
@@ -311,6 +411,9 @@ export const CorrespondenceDetailModal: React.FC<CorrespondenceDetailModalProps>
               </span>
               <span className="px-2.5 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-amber-300">
                 {correspondence.type === 'incoming' ? 'وارد رسمي' : 'صادر رسمي'}
+              </span>
+              <span className="px-2.5 py-0.5 rounded text-[11px] font-bold bg-emerald-900 text-emerald-200 border border-emerald-700">
+                {getCategoryName(currentCategory)}
               </span>
               {correspondence.priority === 'top_urgent' && (
                 <span className="px-2.5 py-0.5 rounded text-[11px] font-bold bg-rose-900 text-rose-200 border border-rose-700">
@@ -410,8 +513,93 @@ export const CorrespondenceDetailModal: React.FC<CorrespondenceDetailModalProps>
             <div className="space-y-6">
               {/* Summary Card */}
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
-                <h4 className="text-xs font-bold text-slate-700">ملخص ومضمون المعاملة:</h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-700">ملخص ومضمون المعاملة:</h4>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 flex items-center gap-1">
+                    <Layers className="w-3 h-3 text-emerald-700" />
+                    <span>التصنيف: {getCategoryName(currentCategory)}</span>
+                  </span>
+                </div>
                 <p className="text-xs text-slate-800 leading-relaxed">{correspondence.summary}</p>
+              </div>
+
+              {/* Tags Management Studio */}
+              <div className="bg-amber-50/40 border border-amber-200/80 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Tag className="w-4 h-4 text-amber-600" />
+                    <span>الوسوم والتصنيفات الدلالية للمتابعة ({formatNumber(currentTags.length)})</span>
+                  </h4>
+                </div>
+
+                {/* Display Current Tags */}
+                <div className="flex flex-wrap items-center gap-1.5 min-h-[32px]">
+                  {currentTags.length === 0 ? (
+                    <span className="text-xs text-slate-400 italic">لا توجد وسوم مخصصة لهذه المعاملة حالياً.</span>
+                  ) : (
+                    currentTags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1.5 shadow-2xs"
+                      >
+                        <span>#{tag}</span>
+                        <X
+                          className="w-3.5 h-3.5 hover:text-rose-600 cursor-pointer transition"
+                          onClick={() => handleRemoveTag(tag)}
+                        />
+                      </span>
+                    ))
+                  )}
+                </div>
+
+                {/* Interactive Add Tag Controls */}
+                <div className="pt-2 border-t border-amber-200/60 space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddTag(tagInput);
+                        }
+                      }}
+                      placeholder="إضافة وسم مخصص والضغط على Enter..."
+                      className="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-amber-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleAddTag(tagInput)}
+                      className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>إضافة وسم</span>
+                    </button>
+                  </div>
+
+                  {/* Preset quick tag buttons */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] text-slate-500 font-semibold">مقترحات شائعة:</span>
+                    {PRESET_QUICK_TAGS.map((pTag) => {
+                      const isAdded = currentTags.includes(pTag);
+                      return (
+                        <button
+                          key={pTag}
+                          type="button"
+                          onClick={() => (isAdded ? handleRemoveTag(pTag) : handleAddTag(pTag))}
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition cursor-pointer border ${
+                            isAdded
+                              ? 'bg-amber-200 border-amber-400 text-amber-950 font-bold'
+                              : 'bg-white border-slate-200 text-slate-600 hover:bg-amber-100'
+                          }`}
+                        >
+                          {isAdded ? `✓ ${pTag}` : `+ ${pTag}`}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
 
               {/* Mock Attachments Studio */}
@@ -829,7 +1017,20 @@ export const CorrespondenceDetailModal: React.FC<CorrespondenceDetailModalProps>
 
                 <div>
                   <h4 className="font-bold text-sm mb-1">الموضوع: {correspondence.subject}</h4>
-                  <div className="text-xs text-slate-700">الجهة: {correspondence.source_or_dest_entity}</div>
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-700">
+                    <span>الجهة: <strong>{correspondence.source_or_dest_entity}</strong></span>
+                    <span>التصنيف: <strong>{getCategoryName(currentCategory)}</strong></span>
+                  </div>
+                  {currentTags.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1 mt-2">
+                      <span className="text-slate-500 text-[11px]">الوسوم:</span>
+                      {currentTags.map((t) => (
+                        <span key={t} className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 border border-slate-300">
+                          #{t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {briefingNote && (
@@ -851,11 +1052,11 @@ export const CorrespondenceDetailModal: React.FC<CorrespondenceDetailModalProps>
                 <div className="pt-8 flex justify-between text-xs text-center border-t border-slate-300">
                   <div>
                     <div className="text-slate-500 mb-8">إعداد / سكرتير أول</div>
-                    <div className="font-bold">الأستاذة / ميادة أحمد رضوان</div>
+                    <div className="font-bold">السكرتير التنفيذي الأول</div>
                   </div>
                   <div>
                     <div className="text-slate-500 mb-8">يعتمد / رئيس مجلس الإدارة</div>
-                    <div className="font-bold">السيد الأستاذ / طارق محمود الشناوي</div>
+                    <div className="font-bold">رئيس مجلس الإدارة</div>
                   </div>
                 </div>
               </div>

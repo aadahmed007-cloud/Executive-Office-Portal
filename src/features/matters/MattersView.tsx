@@ -42,22 +42,24 @@ export const MattersView: React.FC = () => {
   }[]>([]);
 
   useEffect(() => {
-    matterRepo.getAll().then((list) => {
+    const userCtx = { can_view_confidential: currentUser.can_view_confidential, role: currentUser.role, userId: currentUser.id };
+    matterRepo.getAll(undefined, userCtx).then((list) => {
       setMatters(list);
       if (list.length > 0 && !selectedMatter) {
         handleSelectMatter(list[0]);
       }
     });
-  }, []);
+  }, [currentUser]);
 
   const handleSelectMatter = async (matter: Matter) => {
     setSelectedMatter(matter);
+    const userCtx = { can_view_confidential: currentUser.can_view_confidential, role: currentUser.role, userId: currentUser.id };
 
     // Fetch all related items
     const [cList, mList, dList] = await Promise.all([
-      correspondenceRepo.getAll({ matterId: matter.id }),
-      meetingRepo.getAll({ matterId: matter.id }),
-      directiveRepo.getAll({ matterId: matter.id })
+      correspondenceRepo.getAll({ matterId: matter.id }, userCtx),
+      meetingRepo.getAll({ matterId: matter.id }, userCtx),
+      directiveRepo.getAll({ matterId: matter.id }, userCtx)
     ]);
 
     const timeline: typeof timelineItems = [];

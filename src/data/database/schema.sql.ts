@@ -20,12 +20,16 @@ CREATE TABLE IF NOT EXISTS departments (
 
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
+  username TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
   title TEXT NOT NULL,
   department_id TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
   role TEXT NOT NULL,
   can_view_confidential INTEGER DEFAULT 0,
+  password_hash TEXT NOT NULL,
+  password_salt TEXT NOT NULL,
+  must_change_password INTEGER DEFAULT 0,
   avatar TEXT,
   created_at TEXT NOT NULL
 );
@@ -131,6 +135,8 @@ CREATE TABLE IF NOT EXISTS correspondence (
   summary TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'registered',
   matter_id TEXT,
+  category TEXT NOT NULL DEFAULT 'operations',
+  tags TEXT NOT NULL DEFAULT '[]',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   created_by TEXT NOT NULL,
@@ -261,8 +267,23 @@ CREATE TABLE IF NOT EXISTS audit_log (
   before_value TEXT,
   after_value TEXT,
   timestamp TEXT NOT NULL,
-  ip_address TEXT NOT NULL
+  ip_address TEXT NOT NULL,
+  prev_hash TEXT,
+  entry_hash TEXT NOT NULL
 );
+
+-- Audit log immutability triggers (Append-Only)
+CREATE TRIGGER IF NOT EXISTS trg_audit_log_prevent_update
+BEFORE UPDATE ON audit_log
+BEGIN
+  SELECT RAISE(ABORT, 'سجل الرقابة والتدقيق غير قابل للتعديل (Audit log is immutable)');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_audit_log_prevent_delete
+BEFORE DELETE ON audit_log
+BEGIN
+  SELECT RAISE(ABORT, 'سجل الرقابة والتدقيق غير قابل للحذف (Audit log entries cannot be deleted)');
+END;
 
 CREATE TABLE IF NOT EXISTS settings (
   id TEXT PRIMARY KEY,

@@ -13,7 +13,8 @@ export const NotificationsView: React.FC = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   const loadNotifications = async () => {
-    const list = await notificationRepo.getAllForRole(currentUser.role);
+    const userCtx = { can_view_confidential: currentUser.can_view_confidential, role: currentUser.role, userId: currentUser.id };
+    const list = await notificationRepo.getAllForRole(currentUser.role, userCtx);
     const masked = list.map((n) => maskNotification(n, currentUser));
     setNotifications(masked);
   };

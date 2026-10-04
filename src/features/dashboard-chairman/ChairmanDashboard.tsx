@@ -22,6 +22,7 @@ import { maskConfidentialCorrespondence, maskConfidentialDirective, maskConfiden
 import { MeetingDetailModal } from '../meetings/MeetingDetailModal';
 import { CorrespondenceDetailModal } from '../correspondence/CorrespondenceDetailModal';
 import { DirectiveDetailModal } from '../directives/DirectiveDetailModal';
+import { RecentActivityWidget } from '../../ui/components/RecentActivityWidget';
 import {
   Check,
   X,
@@ -71,11 +72,12 @@ export const ChairmanDashboard: React.FC<ChairmanDashboardProps> = ({ onNavigate
   const [detailDirective, setDetailDirective] = useState<Directive | null>(null);
 
   const loadDashboardData = async () => {
+    const userCtx = { can_view_confidential: currentUser.can_view_confidential, role: currentUser.role, userId: currentUser.id };
     const [cList, mList, dList, matList] = await Promise.all([
-      correspondenceRepo.getAll(),
-      meetingRepo.getAll(),
-      directiveRepo.getAll(),
-      matterRepo.getAll()
+      correspondenceRepo.getAll(undefined, userCtx),
+      meetingRepo.getAll(undefined, userCtx),
+      directiveRepo.getAll(undefined, userCtx),
+      matterRepo.getAll(undefined, userCtx)
     ]);
 
     const maskedLetters = cList.map((c) => maskConfidentialCorrespondence(c, currentUser));
@@ -387,6 +389,11 @@ export const ChairmanDashboard: React.FC<ChairmanDashboardProps> = ({ onNavigate
             </div>
           )}
         </div>
+      </div>
+
+      {/* Live Activity & Transparency Stream Widget */}
+      <div className="pt-2">
+        <RecentActivityWidget onNavigateToAudit={() => onNavigate('audit')} maxItems={5} />
       </div>
 
       {/* Decision / Endorsement Modal */}

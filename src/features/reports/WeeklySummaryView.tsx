@@ -14,6 +14,7 @@ import {
   Matter
 } from '../../domain/types';
 import { analyzeOverdue } from '../../domain/rules/overdueLogic';
+import { ExecutiveReportModal } from './ExecutiveReportModal';
 import {
   FileSpreadsheet,
   Printer,
@@ -27,7 +28,9 @@ import {
   TrendingUp,
   Inbox,
   Send,
-  Layers
+  Layers,
+  FileText,
+  Sparkles
 } from 'lucide-react';
 
 export const WeeklySummaryView: React.FC = () => {
@@ -38,15 +41,17 @@ export const WeeklySummaryView: React.FC = () => {
   const [letters, setLetters] = useState<Correspondence[]>([]);
   const [directives, setDirectives] = useState<Directive[]>([]);
   const [matters, setMatters] = useState<Matter[]>([]);
+  const [isExecutiveModalOpen, setIsExecutiveModalOpen] = useState(false);
 
   const [selectedWeek, setSelectedWeek] = useState('2026-W40');
 
   const loadData = async () => {
+    const userCtx = { can_view_confidential: currentUser.can_view_confidential, role: currentUser.role };
     const [mList, cList, dList, matList] = await Promise.all([
-      meetingRepo.getAll(),
-      correspondenceRepo.getAll(),
-      directiveRepo.getAll(),
-      matterRepo.getAll()
+      meetingRepo.getAll(undefined, userCtx),
+      correspondenceRepo.getAll(undefined, userCtx),
+      directiveRepo.getAll(undefined, userCtx),
+      matterRepo.getAll(undefined, userCtx)
     ]);
 
     setMeetings(mList);
@@ -75,13 +80,23 @@ export const WeeklySummaryView: React.FC = () => {
           <p className="text-xs text-slate-500 mt-1">{t('reports_module.subtitle')}</p>
         </div>
 
-        <button
-          onClick={() => window.print()}
-          className="px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
-        >
-          <Printer className="w-4 h-4" />
-          <span>{t('reports_module.print_weekly')}</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => setIsExecutiveModalOpen(true)}
+            className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-md transition flex items-center justify-center gap-2 cursor-pointer border border-slate-700"
+          >
+            <FileText className="w-4 h-4 text-emerald-400" />
+            <span>{t('reports_module.generate_executive_pdf')}</span>
+          </button>
+
+          <button
+            onClick={() => window.print()}
+            className="px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <Printer className="w-4 h-4" />
+            <span>{t('reports_module.print_weekly')}</span>
+          </button>
+        </div>
       </div>
 
       {/* Printable Official Weekly Report Document */}
@@ -226,14 +241,20 @@ export const WeeklySummaryView: React.FC = () => {
         <div className="pt-12 flex justify-between text-xs text-center border-t-2 border-slate-900">
           <div>
             <div className="text-slate-500 mb-8">إعداد وتنسيق / سكرتير أول</div>
-            <div className="font-bold">الأستاذة / ميادة أحمد رضوان</div>
+            <div className="font-bold">السكرتير التنفيذي الأول</div>
           </div>
           <div>
             <div className="text-slate-500 mb-8">يعتمد / رئيس مجلس الإدارة</div>
-            <div className="font-bold">السيد الأستاذ / طارق محمود الشناوي</div>
+            <div className="font-bold">رئيس مجلس الإدارة</div>
           </div>
         </div>
       </div>
+
+      {/* Executive Report Generator Modal */}
+      <ExecutiveReportModal
+        isOpen={isExecutiveModalOpen}
+        onClose={() => setIsExecutiveModalOpen(false)}
+      />
     </div>
   );
 };

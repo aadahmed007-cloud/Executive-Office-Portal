@@ -48,12 +48,12 @@ export const MeetingsView: React.FC = () => {
   const isSecretary = currentUser.role === 'SECRETARY';
 
   const loadMeetings = async () => {
+    const userCtx = { can_view_confidential: currentUser.can_view_confidential, role: currentUser.role };
     const [list, mList] = await Promise.all([
-      meetingRepo.getAll(),
-      matterRepo.getAll()
+      meetingRepo.getAll(undefined, userCtx),
+      matterRepo.getAll(undefined, userCtx)
     ]);
-    const masked = list.map((m) => maskConfidentialMeeting(m, currentUser));
-    setMeetings(masked);
+    setMeetings(list);
     setMatters(mList);
   };
 

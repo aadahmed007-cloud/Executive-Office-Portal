@@ -33,7 +33,8 @@ import {
   UserCheck,
   CheckSquare,
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  ShieldAlert
 } from 'lucide-react';
 
 interface MeetingDetailModalProps {
@@ -82,11 +83,12 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
   const isSecretary = currentUser.role === 'SECRETARY';
 
   const loadDetails = async () => {
+    const userCtx = { can_view_confidential: currentUser.can_view_confidential, role: currentUser.role, userId: currentUser.id };
     const [attList, agList, minData, decList] = await Promise.all([
-      meetingRepo.getAttendees(meeting.id),
-      meetingRepo.getAgenda(meeting.id),
-      meetingRepo.getMinutes(meeting.id),
-      meetingRepo.getDecisions(meeting.id)
+      meetingRepo.getAttendees(meeting.id, userCtx),
+      meetingRepo.getAgenda(meeting.id, userCtx),
+      meetingRepo.getMinutes(meeting.id, userCtx),
+      meetingRepo.getDecisions(meeting.id, userCtx)
     ]);
 
     setAttendees(attList);
@@ -107,6 +109,28 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
   }, [isOpen, meeting.id]);
 
   if (!isOpen) return null;
+
+  if (meeting.confidentiality !== 'normal' && !currentUser.can_view_confidential) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4" dir="rtl">
+        <div className="bg-white rounded-3xl p-6 max-w-md w-full text-center space-y-4 shadow-2xl border border-rose-200">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-900">غير مصرح بالاطلاع</h3>
+          <p className="text-xs text-slate-600">
+            هذا الاجتماع مصنف بدرجة سرية تتطلب تصريحاً أمنياً معتمداً من مكتب رئيس مجلس الإدارة.
+          </p>
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 bg-slate-900 text-white rounded-xl font-bold text-xs hover:bg-slate-800 transition cursor-pointer"
+          >
+            إغلاق
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // --- Handlers ---
   const handleTransitionStatus = async (newStatus: Meeting['status'], label: string) => {
@@ -808,11 +832,11 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
                 <div className="pt-8 flex justify-between text-xs text-center border-t border-slate-300">
                   <div>
                     <div className="text-slate-500 mb-8">أمين السر / سكرتير أول</div>
-                    <div className="font-bold">الأستاذة / ميادة أحمد رضوان</div>
+                    <div className="font-bold">السكرتير التنفيذي الأول</div>
                   </div>
                   <div>
                     <div className="text-slate-500 mb-8">رئيس مجلس الإدارة</div>
-                    <div className="font-bold">السيد الأستاذ / طارق محمود الشناوي</div>
+                    <div className="font-bold">رئيس مجلس الإدارة</div>
                   </div>
                 </div>
               </div>

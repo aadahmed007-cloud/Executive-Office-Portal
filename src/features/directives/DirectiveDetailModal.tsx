@@ -28,7 +28,8 @@ import {
   ShieldCheck,
   Trash2,
   Edit3,
-  Save
+  Save,
+  ShieldAlert
 } from 'lucide-react';
 
 interface DirectiveDetailModalProps {
@@ -67,10 +68,11 @@ export const DirectiveDetailModal: React.FC<DirectiveDetailModalProps> = ({
   const isCompleted = directive.status === 'completed' || directive.status === 'closed';
 
   const loadData = async () => {
-    const list = await directiveRepo.getUpdates(directive.id);
+    const userCtx = { can_view_confidential: currentUser.can_view_confidential, role: currentUser.role, userId: currentUser.id };
+    const list = await directiveRepo.getUpdates(directive.id, userCtx);
     setUpdates(list);
     if (directive.matter_id) {
-      matterRepo.getById(directive.matter_id).then((m) => setLinkedMatter(m));
+      matterRepo.getById(directive.matter_id, userCtx).then((m) => setLinkedMatter(m));
     }
   };
 
@@ -87,6 +89,28 @@ export const DirectiveDetailModal: React.FC<DirectiveDetailModalProps> = ({
   }, [isOpen, directive.id]);
 
   if (!isOpen) return null;
+
+  if (directive.confidentiality !== 'normal' && !currentUser.can_view_confidential) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4" dir="rtl">
+        <div className="bg-white rounded-3xl p-6 max-w-md w-full text-center space-y-4 shadow-2xl border border-rose-200">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-900">غير مصرح بالاطلاع</h3>
+          <p className="text-xs text-slate-600">
+            هذا التكليف مصنف بدرجة سرية تتطلب تصريحاً أمنياً معتمداً من مكتب رئيس مجلس الإدارة.
+          </p>
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 bg-slate-900 text-white rounded-xl font-bold text-xs hover:bg-slate-800 transition cursor-pointer"
+          >
+            إغلاق
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const handleAddProgressUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -559,7 +583,7 @@ export const DirectiveDetailModal: React.FC<DirectiveDetailModalProps> = ({
                   </div>
                   <div>
                     <div className="text-slate-500 mb-8">يعتمد / رئيس مجلس الإدارة</div>
-                    <div className="font-bold">السيد الأستاذ / طارق محمود الشناوي</div>
+                    <div className="font-bold">رئيس مجلس الإدارة</div>
                   </div>
                 </div>
               </div>

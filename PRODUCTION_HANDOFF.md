@@ -1,34 +1,34 @@
-# وثيقة التسليم والتشغيل والإنتاج (Production Handoff Document)
-## منظومة «مساعد مكتب رئيس مجلس الإدارة» — الهيئة القومية للبريد المصري
-**النسخة:** 1.0.0 (نواة سيادية مغلقة)  
-**تاريخ الإعداد:** أكتوبر 2026  
-**الجهة المطورة:** الفريق الاستشاري لتطوير نظم المكاتب الرئاسية  
-**مستوى التصنيف الأمني:** سري داخلي (مخصص لمسؤولي النظم والبنية التحتية IT)
+# وثيقة التسليم الفني ومتطلبات النشر (Technical Handoff & Deployment Document)
+## منظومة «مكتب مساعد رئيس مجلس الإدارة» — نموذج أولي استعراضي (Prototype)
+
+- **الحالة الحالية:** Prototype v0.x: design validation only. Not approved for production. Pending security review and backend implementation.
+- **التاريخ:** أكتوبر 2026
+- **المستهدف:** فريق هندسة النظم وتكنولوجيا المعلومات والفرق الأمنية المعنية بمراجعة التصميم
 
 ---
 
-## 1. الملخص التنفيذي والهندسة المعمارية للنظام (Architecture Overview)
+## 1. الملخص المعماري للنموذج الأولي (Architecture Overview)
 
-صُممت المنظومة لتعمل وفق أعلى معايير السيادة الرقمية والأمن المعلوماتي للمكاتب العليا في جمهورية مصر العربية:
-- **صفر اعتمادات خارجية (Zero External Calls / No CDN):** النظام لا يستدعي أي حزم أو خطوط أو خوادم خارجية عبر الإنترنت.
-- **طبقة وصول للبيانات مفصولة بالكامل (Repository Pattern):** تم بناء كافة وحدات الواجهة الأمامية بالاعتماد على واجهات برمجية صارمة (`Contracts`)، مما يتيح التبديل الفوري بين محرك التخزين المحلي في المتصفح (`SQLite WASM + IndexedDB`) وخادم خلفي حقيقي على الشبكة المغلقة (`REST API Backend`) دون الحاجة لتعديل سطر واحد في كود الواجهات.
-- **دعم كامل للغة العربية (Arabic-First RTL):** تدويل شامل من خلال ملف مركزي (`ar.json`) مع دعم الأرقام المشرقية/الغربية والتقويم الميلادي والهجري بتوقيت القاهرة.
+صُمم النموذج الأولي الحالي للتحقق من متطلبات واجهة المستخدم ومسارات العمل الإدارية لمكتب رئيس مجلس الإدارة:
+- **تشغيل محلي في المتصفح:** يعتمد النموذج على محرك `SQLite WASM` مع طبقة تخزين مستمرة في `IndexedDB`.
+- **فصل طبقة البيانات (Repository Pattern):** كافة مكوّنات الواجهة ترتبط بعقود برمجية محددة (`src/data/contracts/index.ts`)، مما يسمح باستبدال المحرك المحلي بمستودعات تتصل بخادم حقيقي (`REST API Backend`) دون تغيير منطق الواجهات.
+- **واجهة عربية كاملة (Arabic-First RTL):** تدويل مركزي عبر ملف الموارد (`ar.json`) مع دعم أرقام وتقويم متوافق مع بيئة العمل.
 
 ```
 +-----------------------------------------------------------------------------------+
 |                           طبقة واجهة المستخدم (UI Layer)                         |
-|   - لوحة الرئيس الهادئة (Mobile/Tablet First)                                     |
-|   - مركز السكرتارية التنفيذي الغني بالبيانات                                     |
+|   - لوحة رئيس مجلس الإدارة (Desktop / Tablet / Mobile UI)                         |
+|   - لوحة السكرتارية التنفيذية الغنية بالبيانات                                     |
 |   - المفكرة والاجتماعات | الوارد والصادر | التكليفات | سجل الرقابة | الملخص الأسبوعي   |
 +-----------------------------------------------------------------------------------+
                                          │
                                          ▼
 +-----------------------------------------------------------------------------------+
 |                        طبقة قواعد الأعمال والنطاق (Domain Rules)                  |
-|   - محرك فحص التعارض الزمني والقاعات (conflictDetector)                           |
+|   - محرك فحص التعارض الزمني لمواعيد الاجتماعات (conflictDetector)                 |
 |   - محرك الترقيم السنوي للوارد والصادر والتكليفات (serialGenerator)                |
 |   - محرك حساب فترات التأخير والتنبيهات (overdueLogic)                             |
-|   - مصفوفة الصلاحيات وحجب المعاملات السرية (confidentiality)                      |
+|   - مصفوفة صلاحيات درجات السرية (confidentiality)                                 |
 +-----------------------------------------------------------------------------------+
                                          │
                                          ▼
@@ -40,209 +40,214 @@
             ┌────────────────────────────┴────────────────────────────┐
             ▼                                                         ▼
 +─────────────────────────────────+       +─────────────────────────────────────────+
-| الخيار الحالي (Standalone Mode) |       |  الخيار المستقبلي (LAN Server Mode)     |
-| - محرك SQLite WASM المحلي       |       |  - خادم محلي Express.js / Fastify       |
-| - تخزين مستمر في IndexedDB      |       |  - قاعدة بيانات PostgreSQL أو SQLite WAL|
-| - يعمل داخل المتصفح 100%        |       |  - ربط شبكي مشفر mTLS داخل مبنى الهيئة   |
+| النموذج الحالي (Browser Only)   |       |  الهدف الإنتاجي (Server Backend)        |
+| - محرك SQLite WASM بالمتصفح     |       |  - خادم واجهة برمجية API محمي          |
+| - تخزين في IndexedDB محلياً     |       |  - قاعدة بيانات SQLite WAL على الخادم    |
+| - حصر البيانات بجهاز واحد       |       |  - مصادقة عبر كوكيز HttpOnly مشفرة       |
 +─────────────────────────────────+       +─────────────────────────────────────────+
 ```
 
 ---
 
-## 2. خطة الانتقال لخادم محلي (Backend Migration Plan)
+## 2. القيود الجوهرية للنموذج الأولي للمتصفح (Known Limitations of the Browser Prototype)
 
-للانتقال من التخزين المحلي في المتصفح إلى خادم محلي على الشبكة المغلقة لمكتب رئيس مجلس الإدارة (On-Premises / Air-gapped LAN):
+يجب مراعاة هذه الحدود التقنية بصراحة ووضوح قبل أي استخدام ميداني:
+1. **انعزال البيانات محلياً (Single-Device Storage):**
+   - تعيش البيانات داخل `IndexedDB` الخاص بمتصفح المستخدم الحالي فقط.
+   - لا توجد مزامنة تلقائية بين جهاز السكرتير وجهاز رئيس مجلس الإدارة في هذا النموذج الأولي. مشاركة البيانات تتطلب مستودعاً خادمياً مشتركاً.
+2. **عدم إمكانية فرض حجب السرية قطعياً داخل العميل (Confidentiality is Not Enforceable Client-Side):**
+   - قناع الحجب على مستوى الواجهة أو المستودع المحلي يمنع العرض العادي، لكن البيانات غير المحجوبة المخزنة بملف SQLite في ذاكرة المتصفح يمكن استخراجها عبر أدوات فحص المطورين (`Browser DevTools / Storage Inspection`).
+   - الفرض القطعي للسرية يتطلب خادماً خلفياً (`Server-side API`) يرفض إرسال السجلات السرية في الاستجابة لمن لا يملك التصريح.
+3. **محدودية حماية سجل الرقابة محلياً (Audit Immutability Limitations):**
+   - إضافة محفزات منع الحذف (`DB Triggers`) وسلاسل الهاش (`Hash Chain`) تكشف وتمنع التلاعب العرضي فقط، ولكنها لا تمنع مستخدماً يملك السيطرة على المتصفح من تعديل الذاكرة المحلية.
+   - عدم القابلية للتغيير قانونياً ورقابياً تتطلب خادماً خلفياً بمستخدم قاعدة بيانات ذي صلاحية `INSERT-only` مع ترحيل السجلات لحظياً إلى خادم مراجعة مستقل (`Offsite Log Shipping`).
 
-### الخطوة 1: إنشاء مستودعات برمجية تتصل بـ API (`HttpRepository`)
-يتم استبدال الفئات الحالية بإنشاء ملف `/src/data/http/httpRepositories.ts` يطبق نفس واجهات `src/data/contracts/index.ts`:
+---
+
+## 3. خيارات وأنماط النشر المعمارية (Deployment Modes)
+
+لحسم التعارض بين متطلبات الشبكة المعزولة واحتياج الوصول المتنقل، يتوفر خياران معتمدان للنشر الإنتاجي (Pending IT/Information Security Decision):
+
+### الخيار الأول: شبكة محلية داخل المبنى فقط (Inside-Building LAN Only)
+- **طبيعة النشر:** خادم محلي متصل بشبكة سلكية/لاسلكية معزولة تماماً وغير متصلة بالإنترنت داخل الجناح الرئاسي.
+- **الأجهزة:** حواسب مكتبية وأجهزة لوحية متصلة بنقطة وصول لاسلكية داخلية مخصصة ومحمية عبر شبكة VLAN مفصولة (`<LAN_SUBNET>`).
+- **المزايا:** عزل شبكي فيزيائي وتام ضد أي هجمات من خارج المبنى.
+
+### الخيار الثاني: شبكة محلية مع نفق VPN معتمد (LAN + Organization-Approved VPN)
+- **طبيعة النشر:** تشغيل الخادم على الشبكة المغلقة، مع إتاحة الوصول لجهاز رئيس مجلس الإدارة عند التنقل خارج المكتب عبر بوابة VPN رسمية معتمدة من إدارة أمن المعلومات بالمؤسسة مع شهادات مصادقة طرفية (`mTLS / Hardware Tokens`).
+- **المزايا:** توفير المرونة لرئيس مجلس الإدارة مع الحفاظ على التشفير والانعزال المؤسسي.
+- **ملاحظة:** يظل اختيار أحد هذين النمطين رهناً بقرار لجنة أمن المعلومات والسياسات المؤسسية.
+
+---
+
+## 4. خطة النشر وقاعدة البيانات في الإنتاج (Production Backend & Database Plan)
+
+### 4.1. محرك البيانات المعتمد (SQLite in WAL Mode)
+- نظراً لأن النظام يخدم مستخدمين رئيسيين (رئيس مجلس الإدارة والسكرتارية التنفيذية)، فإن الخيار الإنتاجي الأبسط والأكثر أماناً وموثوقية هو استخدام **محرك SQLite مع تفعيل نمط الكتابة المسبقة (WAL - Write-Ahead Logging)** على الخادم المحلي.
+- يُدار النسخ الاحتياطي عبر أداة `Litestream` للنسخ المتزامن أو عبر الأمر الرسمي `.backup` المجدول في نظام التشغيل.
+- يُقترح النظر في محركات أخرى (مثل PostgreSQL) كخيار مستقبلي اختياري فقط في حال توسع المنظومة لتشمل عدداً كبيراً من الإدارات والمستخدمين المتزامنين.
+
+### 4.2. نموذج الاتصال عبر مغلف مركزي موحد (`apiFetch Wrapper`)
+عند بناء المستودعات المتصلة بالخادم (`src/data/http/httpRepositories.ts`)، يجب الامتناع عن وضع هيدرز منفصلة في كل دالة، واستخدام مغلف موحد:
 
 ```typescript
-// مثال: مستودع الاجتماعات المتصل بالخادم المحلي
-import { IMeetingRepository } from '../contracts';
-import { Meeting } from '../../domain/types';
+// Shared centralized fetch wrapper
+export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(`/api/v1${endpoint}`, {
+    ...options,
+    credentials: 'include', // HttpOnly Secure cookies
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
 
-export class HttpMeetingRepository implements IMeetingRepository {
-  private baseUrl = '/api/v1/meetings';
-
-  async getAll(filter?: { status?: string; matterId?: string; date?: string }): Promise<Meeting[]> {
-    const params = new URLSearchParams(filter as any).toString();
-    const res = await fetch(`${this.baseUrl}?${params}`, {
-      headers: { 'Authorization': `Bearer ${sessionStorage.getItem('lan_auth_token')}` }
-    });
-    return res.json();
+  if (response.status === 401) {
+    // Centralized session expiry / unauthorized handling
+    window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+    throw new Error('انتهت صلاحية الجلسة، يرجى إعادة تسجيل الدخول');
   }
 
-  async getById(id: string): Promise<Meeting | null> {
-    const res = await fetch(`${this.baseUrl}/${id}`);
-    if (res.status === 404) return null;
-    return res.json();
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || 'حدث خطأ في معالجة الطلب');
   }
 
-  async create(data: Omit<Meeting, 'id' | 'created_at' | 'updated_at'>): Promise<Meeting> {
-    const res = await fetch(this.baseUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    return res.json();
-  }
-  // ... باقي الدوال تطبق بنفس النسق
+  return response.json();
 }
 ```
 
-### الخطوة 2: تبديل نقطة التصدير في الحاوية (`Dependency Injection`)
-في ملف `src/data/sqlite/repositories.ts`، يكفي تغيير المصدر:
-```typescript
-// للتبديل للوضع الشبكي:
-export const meetingRepo = new HttpMeetingRepository();
-export const correspondenceRepo = new HttpCorrespondenceRepository();
-export const directiveRepo = new HttpDirectiveRepository();
-```
+### 4.3. معمارية التحكم في الوصول وسرية البيانات (Access Control: RBAC + ABAC)
+تم في المرحلة (ج) الفصل المعماري التام بين الأدوار والتصاريح الأمنية:
+1. **النموذج الهجين (Role-Based + Attribute-Based):**
+   - الدور (`role`: `CHAIRMAN` أو `SECRETARY`) يحدد الوظائف التشغيلية المتاحة (مثل اعتماد المعاملات، إنشاء التكليفات، إدارة الأجندة).
+   - سمة التصريح الأمني (`can_view_confidential`: boolean) تمثل خاصية ABAC مستقلة عن الدور؛ فلا يُفترض تلقائياً أن أي مستخدم بمجرد كونه رئيساً أو سكرتيراً يحق له فك حجب السجلات المصنفة (`confidential` أو `top_secret`) دون وجود هذا التصريح صراحة في ملفه الأمني.
+2. **الفرض على مستوى حدود البيانات (Data-Access Layer Enforcement):**
+   - تم تحديث عقود المستودعات (`contracts/index.ts`) ومحرك الاستعلامات (`repositories.ts`) لطلب كائن السياق الأمني `UserContext`.
+   - الاستعلامات تستبعد آلياً السجلات السرية على مستوى استعلام SQL (`WHERE (confidentiality = 'normal' OR confidentiality IS NULL)`).
+   - جلب السجلات الفردية بالمعرف (`getById`) يُرجع `null` / 403 لمن لا يملك التصريح.
+   - الكيانات التابعة (المرفقات، المذكرات الإيضاحية، التأشيرات، خطط التوجيه، التحديثات) ترتبط بجواز اطلاع السجل الرئيسي، ولا تُسلَّم للمستخدم إلا إذا كان مصرحاً له بالسجل الأصل.
+3. **طبقات الحماية الميدانية (Defense-in-Depth):**
+   - حجب واجهة المستخدم (`maskConfidentialCorrespondence`, `maskConfidentialDirective`, إلخ) وشاشات الحجب التحذيرية (`Unauthorized Shields`) في النوافذ المنبثقة تعمل كطبقة حماية بصرية ثانوية لمنع التسريب بالنظر، وليست خط الدفاع الأول.
+   - في الخادم الخلفي الإنتاجي، يُمنع إرسال أي بايت من السجلات السرية عبر الشبكة لأي عميل غير مصرح له.
+
+### 4.4. معمارية سجل التدقيق ومنع التلاعب والنسخ الاحتياطي (Audit Tamper-Resistance & Backups)
+تم في المرحلة (د) تعزيز الحماية التشفيرية لسجل الرقابة والنسخ الاحتياطي:
+1. **سلسلة التشفير المتسلسلة (SHA-256 Hash Chaining):**
+   - كل قيد رقابي جديد يُحسب له توقيع تشفيري `entry_hash` باستخدام خوارزمية SHA-256 يشمل: المعرف، التوقيت، المستخدم، الصفة، الإجراء، الكيان، القيمة السابقة، القيمة بعد التعديل، عنوان IP، مع ربطه بهاش القيد السابق `prev_hash`.
+   - توفر المنظومة دالة فحص وتدقيق رياضي `verifyAuditLogIntegrity()` للتحقق الفوري من تسلسل كافة الحلقات وعدم انقطاعها أو تعديل أي قيد.
+2. **محفزات المنع المباشر بقاعدة البيانات (SQLite Immutability Triggers):**
+   - تم تفعيل محفزين (`trg_audit_log_prevent_update` و `trg_audit_log_prevent_delete`) يجهضان بقوة (`RAISE(ABORT)`) أي محاولة برمجية لتعديل أو حذف أي صف داخل جدول `audit_log`.
+3. **حزم النسخ الاحتياطي الموثقة تشفيرياً (Backup Manifests with SHA-256 Checksums):**
+   - تدعم المنظومة تصدير حزمة JSON موثقة ببصمة تشفيرية `checksum_sha256` يتم فحصها رياضياً قبل قبول أي استعادة للبيانات لضمان عدم تلف أو التلاعب بملف النسخة الاحتياطية.
+4. **التوصية الإنتاجية لسجل الرقابة (Production Recommendation):**
+   - على الخادم الإنتاجي، يُوصى بترحيل سجلات الرقابة لحظياً عبر شبكة معزولة إلى خادم تدقيق خارجي مستقل غير قابل للتعديل (`WORM - Write Once Read Many / Syslog`) مع منح مستخدم تطبيق الويب صلاحية `INSERT-only` على جدول الرقابة.
 
 ---
 
-## 3. عقد وتوثيق واجهات برمجة التطبيقات (REST API Contract)
+## 5. عقد واجهات برمجة التطبيقات المقترح (Proposed REST API Contract)
 
-كافة مسارات الـ API تعمل بنسق JSON وبتوقيت القاهرة (`Africa/Cairo` / ISO 8601):
+كافة المسارات تعتمد نسق JSON وتوقيت القاهرة المحلي:
 
-### 3.1. المصادقة والصلاحيات (Authentication & RBAC)
+### 5.1. المصادقة والجلسات (Authentication & Session)
+- `POST /api/v1/auth/login`
+  - **الطلب:** `{ username: string, password: string }`
+  - **الاستجابة:** كوكيز جلسة آمنة `Set-Cookie: session_id=...; HttpOnly; Secure; SameSite=Strict` + بيانات المستخدم `{ id, name, title, role, can_view_confidential }`.
+- `POST /api/v1/auth/logout`
+  - **الوصف:** إبطال الجلسة ومسح الكوكيز.
 - `GET /api/v1/auth/me`
-  - **الوصف:** استرجاع بيانات المستخدم النشط وتصريحه الأمني.
-  - **الاستجابة:** `{ id, name, title, role, can_view_confidential, avatar }`
-- `POST /api/v1/auth/switch-role`
-  - **الطلب:** `{ role: "CHAIRMAN" | "SECRETARY" | "ADMIN", pinCode: "1234" }`
-  - **الاستجابة:** `{ token: "jwt-token-string", user: { ... } }`
+  - **الوصف:** استرجاع هوية وصلاحيات المستخدم صاحب الجلسة الحالية.
+- **ملاحظة أمنية حول الجلسات:** تُدار الجلسات عبر كوكيز مشفرة ومحمية (`HttpOnly; Secure; SameSite=Strict`) بدلاً من تخزين التوكن في `localStorage` أو `sessionStorage`. الدور (`role`) والتصريح الأمني يُحددان بناءً على سجل المستخدم بالخادم حصراً، ولا يُقبل أي دور مرسل من العميل.
+- **المصادقة الثنائية (Recommended 2FA in Production):** يُوصى بشدة في بيئة الإنتاج بتفعيل المصادقة متعددة العوامل (مثل مفاتيح الأمان العتادية FIDO2 / YubiKey أو تطبيقات TOTP المؤسسية) لحساب رئيس مجلس الإدارة والسكرتارية التنفيذية قبل إنشاء الجلسة.
 
-### 3.2. المفكرة والاجتماعات (Meetings API)
-- `GET /api/v1/meetings`
-  - **المعلمات (Query):** `status`, `matter_id`, `date`, `type`
-  - **الاستجابة:** `Meeting[]`
-- `POST /api/v1/meetings`
-  - **الطلب:** `{ title, location, start_time, end_time, meeting_type, matter_id, confidentiality, notes }`
-- `GET /api/v1/meetings/:id/agenda` & `POST /api/v1/meetings/:id/agenda`
-- `GET /api/v1/meetings/:id/attendees` & `POST /api/v1/meetings/:id/attendees`
-- `GET /api/v1/meetings/:id/minutes` & `POST /api/v1/meetings/:id/minutes`
-- `POST /api/v1/meetings/:id/decisions` (تسجيل القرارات وتحويلها لتكليفات)
-
-### 3.3. الوارد والصادر ومذكرات العرض (Correspondence & Briefings API)
-- `GET /api/v1/correspondence`
-  - **المعلمات:** `type: "incoming" | "outgoing"`, `status`, `priority`, `confidentiality`
-- `POST /api/v1/correspondence` (تسجيل قيد وارد جديد وتوليد رقم `IN-2026-XXXX`)
-- `GET /api/v1/correspondence/:id/briefing` & `POST /api/v1/correspondence/:id/briefing`
-- `POST /api/v1/correspondence/:id/approve` (تسجيل تأشيرة رئيس مجلس الإدارة)
-- `POST /api/v1/correspondence/:id/routing` (تسجيل إحالة للقطاع بمهلة زمنية)
-
-### 3.4. التكليفات الرئاسية (Directives API)
-- `GET /api/v1/directives`
-- `POST /api/v1/directives` (إصدار تكليف جديد بكود `DIR-2026-XXXX`)
-- `POST /api/v1/directives/:id/updates` (إضافة تقرير متابعة مرحلي وتحديث نسبة الإنجاز)
-- `PUT /api/v1/directives/:id/close` (إغلاق واعتماد التكليف نهائياً)
-
-### 3.5. سجل الرقابة والمراجعة (Audit Log API)
-- `GET /api/v1/audit` (استرجاع سجل العمليات غير القابل للتعديل)
-- `POST /api/v1/audit` (تسجيل قيد رقابي محمي)
+### 5.2. العمليات التشغيلية (Domain Endpoints)
+- **الاجتماعات:** `GET/POST /api/v1/meetings`, `POST /api/v1/meetings/:id/decisions`
+- **الوارد والصادر:** `GET/POST /api/v1/correspondence`, `POST /api/v1/correspondence/:id/approve`
+- **التكليفات:** `GET/POST /api/v1/directives`, `POST /api/v1/directives/:id/updates`
+- **سجل الرقابة:** `GET /api/v1/audit` (متاح للمصرح لهم، مع صلاحية `INSERT-only` لمستخدم خادم التطبيق).
 
 ---
 
-## 4. دليل التثبيت والنشر على الشبكة المغلقة (LAN On-Premises Deployment)
+## 6. نموذج إعداد خادم الويب المحلي (Sample NGINX Configuration)
 
-### 4.1. متطلبات الخادم المحلي (Server Requirements):
-- **نظام التشغيل:** Ubuntu Server 24.04 LTS أو RHEL 9 Enterprise.
-- **المعالج:** 4 Cores فما فوق.
-- **الذاكرة العشوائية:** 8 GB RAM.
-- **التخزين:** 100 GB NVMe SSD (مع تفعيل RAID 1 للحماية من تلف الأقراص).
-- **الشبكة:** بطاقة شبكة محلية مخصصة بدون بوابة إنترنت (Air-gapped Local Subnet: `10.120.4.0/24`).
-
-### 4.2. خطوات تثبيت خادم التطبيق (Node.js + NGINX):
-
-```bash
-# 1. تثبيت بيئة التشغيل المحلية
-sudo apt update && sudo apt install -y nginx nodejs npm
-
-# 2. بناء ملفات الواجهة الإنتاجية
-npm run build
-
-# 3. نقل الملفات لمجلد الويب السيادي
-sudo mkdir -p /var/www/chairmans-office
-sudo cp -r dist/* /var/www/chairmans-office/
-
-# 4. تهيئة خادم NGINX المحلي مع تفعيل شهادة SSL ذاتية التوقيع للشبكة المغلقة
-sudo nano /etc/nginx/sites-available/chairmans-office
-```
-
-**ملف إعداد NGINX المقترح (`/etc/nginx/sites-available/chairmans-office`):**
 ```nginx
+# Sample hardened NGINX configuration for LAN on-premises
 server {
     listen 443 ssl http2;
-    server_name chairman.postal.local;
+    server_name <INTERNAL_HOSTNAME>;
 
-    ssl_certificate /etc/ssl/certs/postal_local.crt;
-    ssl_certificate_key /etc/ssl/private/postal_local.key;
+    ssl_certificate /etc/ssl/certs/internal_office.crt;
+    ssl_certificate_key /etc/ssl/private/internal_office.key;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
 
     root /var/www/chairmans-office;
     index index.html;
 
-    # حماية الهيدرز الأمنية
-    add_header X-Frame-Options "SAMEORIGIN";
-    add_header X-XSS-Protection "1; mode=block";
-    add_header X-Content-Type-Options "nosniff";
-    add_header Content-Security-Policy "default-src 'self' 'unsafe-inline' blob: data:;";
+    # Security Headers
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';" always;
+
+    client_max_body_size 10M;
 
     location / {
         try_files $uri $uri/ /index.html;
     }
 
+    # Proxy to local Node.js service
     location /api/ {
         proxy_pass http://127.0.0.1:4000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 ```
 
 ---
 
-## 5. خطة نقل البيانات والنسخ الاحتياطي والطوارئ (Backup & Disaster Recovery)
+## 7. سكريبت وإجراءات النسخ الاحتياطي المشفر (Encrypted Backup Procedure)
 
-### 5.1. تصدير واستيراد قاعدة بيانات SQLite الحالية
-- يمكن للمسؤول في أي وقت النقر على **«تصدير نسخة احتياطية من ملف قاعدة البيانات (.sqlite)»** من شاشة الإعدادات.
-- لتحويل ملف `.sqlite` المصدّر إلى قاعدة بيانات PostgreSQL على الخادم:
 ```bash
-# باستخدام أداة pgloader المحلية
-pgloader chairmans_office_backup.sqlite postgresql://postal_admin:SecretPass@localhost:5432/chairmans_office_db
-```
+#!/usr/bin/env bash
+# /etc/cron.hourly/backup_chairmans_office.sh
+set -euo pipefail
 
-### 5.2. سكريبت النسخ الاحتياطي التلقائي المجدول (`cron job`):
-يتم جدولة نسخ احتياطي محلي كل ساعة على الخادم:
-```bash
-# /etc/cron.hourly/backup_postal_db.sh
-#!/bin/bash
-BACKUP_DIR="/var/backups/chairmans_office"
+BACKUP_LOCAL_DIR="/var/backups/chairmans_office"
+REMOTE_SHARE="/mnt/secure_backup_storage"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-mkdir -p $BACKUP_DIR
+RECIPIENT_KEY_ID="office-backup-public-key"
 
-# إنشاء نسخة مشفرة
-sqlite3 /var/data/chairmans_office.db ".backup $BACKUP_DIR/db_$TIMESTAMP.sqlite"
-gzip $BACKUP_DIR/db_$TIMESTAMP.sqlite
+mkdir -p "$BACKUP_LOCAL_DIR"
 
-# الاحتفاظ بآخر 30 يوماً وحذف ما هو أقدم
-find $BACKUP_DIR -type f -mtime +30 -delete
+# 1. إنشاء نسخة متسقة عبر أمر SQLite الرسمي
+sqlite3 /var/data/chairmans_office.db ".backup $BACKUP_LOCAL_DIR/db_$TIMESTAMP.sqlite"
+
+# 2. تشفير النسخة باستخدام مفتاح عام غير قابل لفك التشفير على الخادم ذاته
+gpg --batch --yes --encrypt --recipient "$RECIPIENT_KEY_ID" "$BACKUP_LOCAL_DIR/db_$TIMESTAMP.sqlite"
+rm -f "$BACKUP_LOCAL_DIR/db_$TIMESTAMP.sqlite"
+
+# 3. نقل النسخة المشفرة إلى جهاز / وسيط تخزين منفصل فيزيائياً
+if [ -d "$REMOTE_SHARE" ]; then
+    cp "$BACKUP_LOCAL_DIR/db_$TIMESTAMP.sqlite.gpg" "$REMOTE_SHARE/"
+fi
+
+# 4. تدوير النسخ المحلية وحذف ما تجاوز 30 يوماً
+find "$BACKUP_LOCAL_DIR" -type f -name "*.gpg" -mtime +30 -delete
 ```
 
----
-
-## 6. إرشادات الأمان والحماية الرئاسية (Security Hardening Guidelines)
-
-1. **عزل الشبكة (Air-Gapping):** عدم ربط خادم مكتب رئيس مجلس الإدارة بأي خط إنترنت خارجي.
-2. **التحكم بالوصول المبني على الدور (RBAC):** عزل صلاحية قراءة المعاملات المصنفة `سري` و `سري للغاية` وفق جدول الصلاحيات.
-3. **قفل الجلسات غير النشطة:** تم ضبط مهلة إغلاق الشاشة تلقائياً على 15 دقيقة من عدم النشاط لحماية المكتب الرئاسي.
-4. **سجل رقابة غير قابل للإلغاء:** سجل الـ `audit_log` مخصص لعمليات الإضافة فقط (`Append-Only`) ولا يحوي أي أمر حذف (`DELETE`).
+> **ملاحظة أمنية جوهرية:** تقنية الأقراص المزدوجة (RAID) تحمي من تلف القرص الصلب فقط، وليست بديلاً بأي حال عن النسخ الاحتياطي المشفر والمنقول خارجياً. ويجب جدولة تجربة استعادة واختبار دورية (`Monthly Restore Test`) شهرياً.
 
 ---
-**اعتماد وثيقة التسليم والجاهزية للإنتاج:**  
-- **مسؤول النظم والشبكات:** م. إسلام فؤاد النجار  
-- **سكرتير أول مكتب رئيس مجلس الإدارة:** الأستاذة / ميادة أحمد رضوان  
-- **رئيس مجلس إدارة الهيئة القومية للبريد:** السيد الأستاذ / طارق محمود الشناوي
+
+## 8. قرارات معلقة بانتظار اعتماد مسؤولي تكنولوجيا المعلومات وأمن المعلومات
+- [ ] تحديد موقع الخادم الفيزيائي وخزانة الخوادم المؤمنة.
+- [ ] اعتماد نمط النشر: شبكة LAN مغلقة داخل المبنى فقط أم مع بوابة VPN للمتنقلين.
+- [ ] إصدار وتثبيت شهادات التشفير الرقمية الصادرة عن المرجع المعتمد للمؤسسة (Internal CA).
+- [ ] تخصيص جهاز/وسيط النسخ الاحتياطي المنفصل ومفاتيح التشفير اللاتماثلية.
+- [ ] مراجعة واعتماد سياسة دورة حياة الحسابات وكلمات المرور.

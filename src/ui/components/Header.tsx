@@ -24,14 +24,15 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings, activeTab, setAc
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
+    const userCtx = { can_view_confidential: currentUser.can_view_confidential, role: currentUser.role, userId: currentUser.id };
     notificationRepo
-      .getAllForRole(currentUser.role)
+      .getAllForRole(currentUser.role, userCtx)
       .then((items) => {
         const unread = items.filter((n) => !n.is_read).length;
         setUnreadCount(unread);
       })
       .catch(() => {});
-  }, [currentUser.role, activeTab]);
+  }, [currentUser.role, currentUser.can_view_confidential, activeTab]);
 
   return (
     <header className="bg-emerald-950 text-white border-b border-emerald-900/60 sticky top-0 z-30 shadow-md">

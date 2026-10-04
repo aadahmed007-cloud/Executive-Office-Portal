@@ -50,6 +50,12 @@ class SqliteEngine {
       if (savedBinary && savedBinary.length > 0) {
         try {
           this.db = new this.SQL.Database(savedBinary);
+          try {
+            this.db.run("ALTER TABLE correspondence ADD COLUMN category TEXT DEFAULT 'operations'");
+          } catch {}
+          try {
+            this.db.run("ALTER TABLE correspondence ADD COLUMN tags TEXT DEFAULT '[]'");
+          } catch {}
           return;
         } catch {
           // If corrupted, fallback to clean seed
@@ -147,12 +153,44 @@ class SqliteEngine {
   }
 
   /**
+   * Export raw binary Uint8Array
+   */
+  public exportBinary(): Uint8Array | null {
+    if (!this.db) return null;
+    return this.db.export();
+  }
+
+  /**
    * Export the SQLite file as a downloadable binary blob
    */
   public exportBlob(): Blob | null {
     if (!this.db) return null;
     const binary = this.db.export();
     return new Blob([binary as any], { type: 'application/x-sqlite3' });
+  }
+
+  /**
+   * Restore database from imported binary blob with integrity and structure verification
+   */
+  public async restoreFromBinary(binaryData: Uint8Array): Promise<{ success: boolean; error?: string; tablesCount?: number }> {
+    if (!this.SQL) return { success: false, error: 'محرك SQLite غير مهيأ' };
+    try {
+      const testDb = new this.SQL.Database(binaryData);
+      // Validate structure
+      const tablesResult = testDb.exec("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('users', 'correspondence', 'directives', 'meetings', 'audit_log')");
+      const foundTables = tablesResult[0]?.values?.length || 0;
+      if (foundTables < 4) {
+        return { success: false, error: 'الملف لا يمثل قاعدة بيانات صالحة لمنظومة مكتب رئيس مجلس الإدارة' };
+      }
+
+      // If valid, swap active database and persist
+      this.db?.close();
+      this.db = testDb;
+      await this.persist();
+      return { success: true, tablesCount: foundTables };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'فشل في استعادة قاعدة البيانات من الملف المحدد' };
+    }
   }
 
   private async bootstrapSchemaAndSeed(): Promise<void> {
@@ -227,8 +265,25 @@ class SqliteEngine {
     // Seed Correspondence
     for (const c of INITIAL_CORRESPONDENCE) {
       this.db.run(
-        'INSERT OR IGNORE INTO correspondence (id, serial_number, type, date, source_or_dest_entity, subject, priority, confidentiality, summary, status, matter_id, created_at, updated_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        this.sanitizeParams([c.id, c.serial_number, c.type, c.date, c.source_or_dest_entity, c.subject, c.priority, c.confidentiality, c.summary, c.status, c.matter_id, c.created_at, c.updated_at, c.created_by])
+        'INSERT OR IGNORE INTO correspondence (id, serial_number, type, date, source_or_dest_entity, subject, priority, confidentiality, summary, status, matter_id, category, tags, created_at, updated_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        this.sanitizeParams([
+          c.id,
+          c.serial_number,
+          c.type,
+          c.date,
+          c.source_or_dest_entity,
+          c.subject,
+          c.priority,
+          c.confidentiality,
+          c.summary,
+          c.status,
+          c.matter_id,
+          (c as any).category || 'operations',
+          JSON.stringify((c as any).tags || []),
+          c.created_at,
+          c.updated_at,
+          c.created_by
+        ])
       );
     }
 
@@ -267,8 +322,8 @@ class SqliteEngine {
     // Seed Audit Log
     for (const a of INITIAL_AUDIT_LOG) {
       this.db.run(
-        'INSERT OR IGNORE INTO audit_log (id, user_id, user_name, user_role, action_type, entity_type, entity_id, before_value, after_value, timestamp, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        this.sanitizeParams([a.id, a.user_id, a.user_name, a.user_role, a.action_type, a.entity_type, a.entity_id, a.before_value, a.after_value, a.timestamp, a.ip_address])
+        'INSERT OR IGNORE INTO audit_log (id, user_id, user_name, user_role, action_type, entity_type, entity_id, before_value, after_value, timestamp, ip_address, prev_hash, entry_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        this.sanitizeParams([a.id, a.user_id, a.user_name, a.user_role, a.action_type, a.entity_type, a.entity_id, a.before_value, a.after_value, a.timestamp, a.ip_address, a.prev_hash, a.entry_hash])
       );
     }
 

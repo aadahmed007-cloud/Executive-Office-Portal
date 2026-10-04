@@ -6,6 +6,8 @@ import { Header } from '../components/Header';
 import { Sidebar } from '../components/Sidebar';
 import { SettingsModal } from '../components/SettingsModal';
 import { LockScreen } from '../../features/auth/LockScreen';
+import { LoginView } from '../../features/auth/LoginView';
+import { PasswordChangeModal } from '../../features/auth/PasswordChangeModal';
 
 // Feature Views
 import { SecretaryDashboard } from '../../features/dashboard-secretary/SecretaryDashboard';
@@ -20,7 +22,7 @@ import { NotificationsView } from '../../features/notifications/NotificationsVie
 import { WeeklySummaryView } from '../../features/reports/WeeklySummaryView';
 
 export const MainLayout: React.FC = () => {
-  const { currentUser, isLocked } = useAuth();
+  const { currentUser, isAuthenticated, isLocked, mustChangePasswordPrompt } = useAuth();
   const { dir } = useI18n();
 
   // Active view tab state (default changes based on role)
@@ -29,6 +31,11 @@ export const MainLayout: React.FC = () => {
   );
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // If user is not authenticated, render official LoginView
+  if (!isAuthenticated) {
+    return <LoginView />;
+  }
 
   // If role switches, switch default dashboard if on a dashboard
   React.useEffect(() => {
@@ -95,6 +102,9 @@ export const MainLayout: React.FC = () => {
 
       {/* Lock Screen when auto-logout activates */}
       {isLocked && <LockScreen />}
+
+      {/* Forced Password Change Modal */}
+      {mustChangePasswordPrompt && <PasswordChangeModal />}
     </div>
   );
 };

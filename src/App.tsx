@@ -7,6 +7,8 @@ import { sqliteEngine } from './data/database/sqliteEngine';
 import { runConflictTests } from './tests/conflictDetector.test';
 import { runSerialTests } from './tests/serialGenerator.test';
 import { runOverdueTests } from './tests/overdueLogic.test';
+import { runAccessControlRuleTests, runAccessControlRepositoryTests } from './tests/accessControl.test';
+import { runAuditIntegrityRuleTests, runAuditDatabaseTriggerTests } from './tests/auditIntegrity.test';
 import { HardDrive, ShieldCheck } from 'lucide-react';
 
 export default function App() {
@@ -19,17 +21,29 @@ export default function App() {
       const conflictOk = runConflictTests();
       const serialOk = runSerialTests();
       const overdueOk = runOverdueTests();
-      if (conflictOk && serialOk && overdueOk) {
-        console.log('✅ All deterministic domain unit tests passed successfully.');
-      }
+      const accessRuleOk = runAccessControlRuleTests();
+      runAuditIntegrityRuleTests().then((auditRuleOk) => {
+        if (conflictOk && serialOk && overdueOk && accessRuleOk && auditRuleOk) {
+          console.log('✅ All deterministic domain unit tests & cryptographic rules passed successfully.');
+        }
+      });
     } catch (e) {
       console.warn('Unit tests verification warning:', e);
     }
 
     sqliteEngine
       .init()
-      .then(() => {
+      .then(async () => {
         setIsDbReady(true);
+        try {
+          const repoAccessOk = await runAccessControlRepositoryTests();
+          const triggerOk = await runAuditDatabaseTriggerTests();
+          if (repoAccessOk && triggerOk) {
+            console.log('🛡️ Phase C & D: Repository access control and audit trigger immutability verified.');
+          }
+        } catch (e) {
+          console.warn('Integration test warning:', e);
+        }
       })
       .catch((err) => {
         console.error('Failed to initialize SQLite WASM engine:', err);
@@ -46,7 +60,7 @@ export default function App() {
           </div>
 
           <div>
-            <h1 className="text-xl font-bold text-slate-100">مساعد مكتب رئيس مجلس الإدارة</h1>
+            <h1 className="text-xl font-bold text-slate-100">مكتب مساعد رئيس مجلس الإدارة</h1>
             <p className="text-xs text-emerald-400 font-medium mt-0.5">الهيئة القومية للبريد المصري</p>
           </div>
 

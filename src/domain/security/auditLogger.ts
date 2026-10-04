@@ -1,29 +1,10 @@
 import { sqliteEngine } from '../../data/database/sqliteEngine';
 import { User, AuditLogEntry, Directive, RoleType, ActionType } from '../types';
+import { computeAuditEntryHash, verifyAuditLogIntegrity } from './cryptoUtils';
 
 export interface AuditContextInfo {
   ipAddress?: string;
   userAgent?: string;
-}
-
-/**
- * Deterministic hash generator to simulate log integrity signature
- */
-function computeLogSignature(
-  id: string,
-  userId: string,
-  actionType: string,
-  entityId: string,
-  timestamp: string
-): string {
-  const payload = `${id}|${userId}|${actionType}|${entityId}|${timestamp}|EG_POST_SOVEREIGN_KEY_2026`;
-  let hash = 0;
-  for (let i = 0; i < payload.length; i++) {
-    const char = payload.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0; // Convert to 32bit integer
-  }
-  return `SIG-SHA256-${Math.abs(hash).toString(16).toUpperCase().padStart(8, '0')}`;
 }
 
 /**
@@ -33,7 +14,7 @@ export class AuditLogger {
   private static defaultIp = '10.120.4.10 (المكتب الرئاسي)';
 
   /**
-   * Core logging method with tamper-resistant persistence
+   * Core logging method with tamper-resistant cryptographic chaining
    */
   public static async log(
     user: Pick<User, 'id' | 'name' | 'role'>,
@@ -50,6 +31,24 @@ export class AuditLogger {
     const timestamp = new Date().toISOString();
     const ip = details.ipAddress || (user.role === 'CHAIRMAN' ? '10.120.4.10 (المكتب الرئاسي)' : '10.120.4.22 (السكرتارية التنفيذية)');
 
+    // Get previous entry hash from SQLite for cryptographic linkage
+    const latestRows = sqliteEngine.query<{ entry_hash: string }>('SELECT entry_hash FROM audit_log ORDER BY timestamp DESC, id DESC LIMIT 1');
+    const prevHash = latestRows[0]?.entry_hash || 'GENESIS-BLOCK-00000000000000000000000000000000';
+
+    const entryHash = await computeAuditEntryHash({
+      id,
+      timestamp,
+      user_id: user.id,
+      user_role: user.role,
+      action_type: actionType,
+      entity_type: entityType,
+      entity_id: entityId,
+      before_value: details.beforeValue || null,
+      after_value: details.afterValue || null,
+      ip_address: ip,
+      prev_hash: prevHash
+    });
+
     const entry: AuditLogEntry = {
       id,
       user_id: user.id,
@@ -61,13 +60,15 @@ export class AuditLogger {
       before_value: details.beforeValue || null,
       after_value: details.afterValue || null,
       timestamp,
-      ip_address: ip
+      ip_address: ip,
+      prev_hash: prevHash,
+      entry_hash: entryHash
     };
 
     // Insert into SQLite
     sqliteEngine.run(
-      `INSERT INTO audit_log (id, user_id, user_name, user_role, action_type, entity_type, entity_id, before_value, after_value, timestamp, ip_address)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO audit_log (id, user_id, user_name, user_role, action_type, entity_type, entity_id, before_value, after_value, timestamp, ip_address, prev_hash, entry_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         entry.id,
         entry.user_id,
@@ -79,7 +80,9 @@ export class AuditLogger {
         entry.before_value,
         entry.after_value,
         entry.timestamp,
-        entry.ip_address
+        entry.ip_address,
+        entry.prev_hash,
+        entry.entry_hash
       ]
     );
 
@@ -174,14 +177,250 @@ export class AuditLogger {
     });
   }
 
+  // --- Meetings & Decisions Audit Methods ---
+
+  /**
+   * Track Scheduling of a Meeting / Board Session
+   */
+  public static async logMeetingScheduled(
+    user: Pick<User, 'id' | 'name' | 'role'>,
+    meeting: { id: string; title: string; start_time: string; location: string; meeting_type: string },
+    context?: AuditContextInfo
+  ): Promise<AuditLogEntry> {
+    return this.log(user, 'CREATE', 'MEETING', meeting.id, {
+      beforeValue: null,
+      afterValue: `جدولة جلسة اجتماع: "${meeting.title}" — القاعة: ${meeting.location} — الموعد: ${meeting.start_time}`,
+      ipAddress: context?.ipAddress
+    });
+  }
+
+  /**
+   * Track Meeting Status Transitions
+   */
+  public static async logMeetingStatus(
+    user: Pick<User, 'id' | 'name' | 'role'>,
+    meetingId: string,
+    meetingTitle: string,
+    beforeStatus: string,
+    afterStatus: string,
+    context?: AuditContextInfo
+  ): Promise<AuditLogEntry> {
+    return this.log(user, 'UPDATE', 'MEETING', meetingId, {
+      beforeValue: `الحالة السابقة: ${beforeStatus}`,
+      afterValue: `تغيير حالة الاجتماع "${meetingTitle}" إلى: ${afterStatus}`,
+      ipAddress: context?.ipAddress
+    });
+  }
+
+  /**
+   * Track Minutes Drafting
+   */
+  public static async logMinutesDrafted(
+    user: Pick<User, 'id' | 'name' | 'role'>,
+    meetingId: string,
+    meetingTitle: string,
+    context?: AuditContextInfo
+  ): Promise<AuditLogEntry> {
+    return this.log(user, 'UPDATE', 'MEETING_MINUTES', meetingId, {
+      beforeValue: 'مسودة قيد الإعداد',
+      afterValue: `صياغة وحفظ مسودة محضر جلسة: "${meetingTitle}"`,
+      ipAddress: context?.ipAddress
+    });
+  }
+
+  /**
+   * Track Official Approval of Meeting Minutes
+   */
+  public static async logMinutesApproved(
+    user: Pick<User, 'id' | 'name' | 'role'>,
+    meetingId: string,
+    meetingTitle: string,
+    context?: AuditContextInfo
+  ): Promise<AuditLogEntry> {
+    return this.log(user, 'DECIDE', 'MEETING_MINUTES', meetingId, {
+      beforeValue: 'مسودة محضر معروضة للاعتماد',
+      afterValue: `اعتماد وتوقيع محضر اجتماع رسمي: "${meetingTitle}" بواسطة رئيس مجلس الإدارة`,
+      ipAddress: context?.ipAddress
+    });
+  }
+
+  /**
+   * Track Executive Board Decisions
+   */
+  public static async logDecisionRecorded(
+    user: Pick<User, 'id' | 'name' | 'role'>,
+    decision: { id: string; meeting_id: string; content: string; assigned_to_name: string },
+    context?: AuditContextInfo
+  ): Promise<AuditLogEntry> {
+    return this.log(user, 'DECIDE', 'MEETING_DECISION', decision.id, {
+      beforeValue: null,
+      afterValue: `إصدار وتوثيق قرار مجلس إدارة: "${decision.content}" — المكلف: ${decision.assigned_to_name}`,
+      ipAddress: context?.ipAddress
+    });
+  }
+
+  // --- Correspondence & Briefing Audit Methods ---
+
+  /**
+   * Track Registration of Incoming / Outgoing Correspondence
+   */
+  public static async logCorrespondenceRegistered(
+    user: Pick<User, 'id' | 'name' | 'role'>,
+    corr: { id: string; serial_number: string; type: string; source_or_dest_entity: string; subject: string },
+    context?: AuditContextInfo
+  ): Promise<AuditLogEntry> {
+    const typeLabel = corr.type === 'incoming' ? 'وارد رسمي' : 'صادر رسمي';
+    return this.log(user, 'CREATE', 'CORRESPONDENCE', corr.id, {
+      beforeValue: null,
+      afterValue: `تسجيل ${typeLabel} [${corr.serial_number}]: "${corr.subject}" — الجهة: ${corr.source_or_dest_entity}`,
+      ipAddress: context?.ipAddress
+    });
+  }
+
+  /**
+   * Track Briefing Note Saved or Presented
+   */
+  public static async logBriefingNoteSaved(
+    user: Pick<User, 'id' | 'name' | 'role'>,
+    corrId: string,
+    serialNumber: string,
+    isPresented: boolean,
+    context?: AuditContextInfo
+  ): Promise<AuditLogEntry> {
+    return this.log(user, 'UPDATE', 'BRIEFING_NOTE', corrId, {
+      beforeValue: isPresented ? 'مسودة قيد الإعداد' : null,
+      afterValue: isPresented
+        ? `تقديم مذكرة العرض الخاصة بالمعاملة [${serialNumber}] رسمياً لشاشة رئيس مجلس الإدارة`
+        : `حفظ وتحديث مسودة مذكرة العرض الخاصة بالمعاملة [${serialNumber}]`,
+      ipAddress: context?.ipAddress
+    });
+  }
+
+  /**
+   * Track Presidential Approval / Endorsement on Correspondence
+   */
+  public static async logCorrespondenceApproved(
+    user: Pick<User, 'id' | 'name' | 'role'>,
+    corrId: string,
+    serialNumber: string,
+    decisionType: string,
+    standardPhrase: string,
+    customDirective?: string,
+    context?: AuditContextInfo
+  ): Promise<AuditLogEntry> {
+    const customPart = customDirective ? ` | التوجيه الخطي: "${customDirective}"` : '';
+    return this.log(user, 'DECIDE', 'CORRESPONDENCE', corrId, {
+      beforeValue: 'معروض على الرئيس',
+      afterValue: `تثبيت تأشيرة رئيس مجلس الإدارة على [${serialNumber}]: (${standardPhrase})${customPart}`,
+      ipAddress: context?.ipAddress
+    });
+  }
+
+  /**
+   * Track Correspondence Routing to Departments
+   */
+  public static async logCorrespondenceRouted(
+    user: Pick<User, 'id' | 'name' | 'role'>,
+    corrId: string,
+    serialNumber: string,
+    toDept: string,
+    actionRequired: string,
+    context?: AuditContextInfo
+  ): Promise<AuditLogEntry> {
+    return this.log(user, 'ROUTING', 'CORRESPONDENCE', corrId, {
+      beforeValue: null,
+      afterValue: `إحالة المعاملة [${serialNumber}] إلى ${toDept} — الإجراء المطلوب: "${actionRequired}"`,
+      ipAddress: context?.ipAddress
+    });
+  }
+
+  // --- Strategic Matters & Contacts Audit Methods ---
+
+  /**
+   * Track Creation of Strategic Matters
+   */
+  public static async logMatterCreated(
+    user: Pick<User, 'id' | 'name' | 'role'>,
+    matter: { id: string; code: string; title: string; lead_entity: string },
+    context?: AuditContextInfo
+  ): Promise<AuditLogEntry> {
+    return this.log(user, 'CREATE', 'MATTER', matter.id, {
+      beforeValue: null,
+      afterValue: `فتح ملف موضوع استراتيجي [${matter.code}]: "${matter.title}" — الجهة القائدة: ${matter.lead_entity}`,
+      ipAddress: context?.ipAddress
+    });
+  }
+
+  /**
+   * Track Creation of VIP Contacts & Interactions
+   */
+  public static async logContactCreated(
+    user: Pick<User, 'id' | 'name' | 'role'>,
+    contact: { id: string; name: string; entity: string; position: string },
+    context?: AuditContextInfo
+  ): Promise<AuditLogEntry> {
+    return this.log(user, 'CREATE', 'CONTACT', contact.id, {
+      beforeValue: null,
+      afterValue: `تسجيل جهة اتصال رفيعة المستوى: ${contact.name} (${contact.position} - ${contact.entity})`,
+      ipAddress: context?.ipAddress
+    });
+  }
+
+  /**
+   * Track Logging of Official Interactions / Calls
+   */
+  public static async logInteractionRecorded(
+    user: Pick<User, 'id' | 'name' | 'role'>,
+    contactName: string,
+    type: string,
+    summary: string,
+    context?: AuditContextInfo
+  ): Promise<AuditLogEntry> {
+    return this.log(user, 'CREATE', 'INTERACTION', `interact-${Date.now()}`, {
+      beforeValue: null,
+      afterValue: `توثيق تفاعل رسمي مع (${contactName}) — النوع: ${type} — الملخص: "${summary}"`,
+      ipAddress: context?.ipAddress
+    });
+  }
+
+  /**
+   * Track Authentication and Session Events
+   */
+  public static async logAuthEvent(
+    user: Pick<User, 'id' | 'name' | 'role'>,
+    eventType: 'LOGIN' | 'LOGOUT' | 'LOCK' | 'UNLOCK' | 'ROLE_SWITCH',
+    details: string,
+    context?: AuditContextInfo
+  ): Promise<AuditLogEntry> {
+    return this.log(user, 'AUTH', 'SESSION', user.id, {
+      beforeValue: null,
+      afterValue: `[${eventType}] ${details}`,
+      ipAddress: context?.ipAddress
+    });
+  }
+
   // --- Export utilities ---
 
   /**
-   * Export all audit logs as a structured CSV string
+   * Export all audit logs as a structured CSV string including cryptographic signatures
    */
   public static async exportToCsv(): Promise<string> {
     const rows = sqliteEngine.query<AuditLogEntry>('SELECT * FROM audit_log ORDER BY timestamp DESC');
-    const header = ['المعرف', 'رقم المستخدم', 'اسم المستخدم', 'الصفة', 'نوع الإجراء', 'نوع الكيان', 'معرف الكيان', 'القيمة السابقة', 'القيمة بعد التعديل', 'التوقيت', 'عنوان IP'];
+    const header = [
+      'المعرف',
+      'رقم المستخدم',
+      'اسم المستخدم',
+      'الصفة',
+      'نوع الإجراء',
+      'نوع الكيان',
+      'معرف الكيان',
+      'القيمة السابقة',
+      'القيمة بعد التعديل',
+      'التوقيت',
+      'عنوان IP',
+      'هاش السجل السابق (prev_hash)',
+      'توقيع SHA-256 (entry_hash)'
+    ];
     
     const csvLines = [header.join(',')];
 
@@ -197,7 +436,9 @@ export class AuditLogger {
         `"${(r.before_value || '').replace(/"/g, '""')}"`,
         `"${(r.after_value || '').replace(/"/g, '""')}"`,
         `"${r.timestamp}"`,
-        `"${r.ip_address}"`
+        `"${r.ip_address}"`,
+        `"${r.prev_hash || ''}"`,
+        `"${r.entry_hash || ''}"`
       ];
       csvLines.push(line.join(','));
     }

@@ -50,9 +50,10 @@ export const DirectivesView: React.FC = () => {
   const [newMatterId, setNewMatterId] = useState('');
 
   const loadData = async () => {
+    const userCtx = { can_view_confidential: currentUser.can_view_confidential, role: currentUser.role, userId: currentUser.id };
     const [dList, mList] = await Promise.all([
-      directiveRepo.getAll(),
-      matterRepo.getAll()
+      directiveRepo.getAll(undefined, userCtx),
+      matterRepo.getAll(undefined, userCtx)
     ]);
     const masked = dList.map((d) => maskConfidentialDirective(d, currentUser));
     setDirectives(masked);

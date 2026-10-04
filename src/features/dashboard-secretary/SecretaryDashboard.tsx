@@ -15,6 +15,7 @@ import {
 } from '../../domain/types';
 import { analyzeOverdue } from '../../domain/rules/overdueLogic';
 import { maskConfidentialCorrespondence, maskConfidentialDirective, maskConfidentialMeeting } from '../../domain/rules/confidentiality';
+import { RecentActivityWidget } from '../../ui/components/RecentActivityWidget';
 import {
   Inbox,
   Calendar,
@@ -50,11 +51,12 @@ export const SecretaryDashboard: React.FC<SecretaryDashboardProps> = ({ onNaviga
     async function loadData() {
       setIsLoading(true);
       try {
+        const userCtx = { can_view_confidential: currentUser.can_view_confidential, role: currentUser.role, userId: currentUser.id };
         const [mList, cList, dList, matList] = await Promise.all([
-          meetingRepo.getAll(),
-          correspondenceRepo.getAll(),
-          directiveRepo.getAll(),
-          matterRepo.getAll()
+          meetingRepo.getAll(undefined, userCtx),
+          correspondenceRepo.getAll(undefined, userCtx),
+          directiveRepo.getAll(undefined, userCtx),
+          matterRepo.getAll(undefined, userCtx)
         ]);
 
         setMeetings(mList.map((m) => maskConfidentialMeeting(m, currentUser)));
@@ -301,6 +303,11 @@ export const SecretaryDashboard: React.FC<SecretaryDashboardProps> = ({ onNaviga
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Live Activity & Transparency Stream Widget */}
+      <div className="pt-2">
+        <RecentActivityWidget onNavigateToAudit={() => onNavigate('audit')} maxItems={5} />
       </div>
     </div>
   );

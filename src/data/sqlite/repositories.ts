@@ -8,7 +8,8 @@ import {
   INotificationRepository,
   IAuditRepository,
   IUserRepository,
-  ISettingsRepository
+  ISettingsRepository,
+  UserContext
 } from '../contracts';
 import {
   Meeting,
@@ -34,14 +35,23 @@ import {
   RoleType
 } from '../../domain/types';
 import { generateSerialNumber } from '../../domain/rules/serialGenerator';
+import { computeAuditEntryHash } from '../../domain/security/cryptoUtils';
 
 // --- Column Whitelists for SQL Injection Protection ---
 const ALLOWED_MEETING_COLUMNS = new Set(['title', 'location', 'start_time', 'end_time', 'meeting_type', 'status', 'matter_id', 'confidentiality', 'notes', 'deleted_at', 'created_by']);
-const ALLOWED_CORRESPONDENCE_COLUMNS = new Set(['serial_number', 'type', 'date', 'source_or_dest_entity', 'subject', 'priority', 'confidentiality', 'summary', 'status', 'matter_id', 'deleted_at', 'created_by']);
+const ALLOWED_CORRESPONDENCE_COLUMNS = new Set(['serial_number', 'type', 'date', 'source_or_dest_entity', 'subject', 'priority', 'confidentiality', 'summary', 'status', 'matter_id', 'category', 'tags', 'deleted_at', 'created_by']);
 const ALLOWED_DIRECTIVE_COLUMNS = new Set(['code', 'title', 'instruction', 'assigned_department', 'assigned_person', 'source_type', 'source_id', 'priority', 'confidentiality', 'status', 'progress_percent', 'issued_at', 'due_date', 'matter_id', 'deleted_at', 'created_by']);
 const ALLOWED_MATTER_COLUMNS = new Set(['code', 'title', 'description', 'confidentiality', 'status', 'lead_entity', 'priority', 'deleted_at']);
 const ALLOWED_CONTACT_COLUMNS = new Set(['name', 'entity', 'position', 'phone', 'email', 'category', 'notes', 'deleted_at']);
 const ALLOWED_USER_COLUMNS = new Set(['name', 'title', 'role', 'can_view_confidential', 'avatar', 'pin_code', 'is_active']);
+
+/**
+ * Checks whether the caller is authorized to view confidential / top-secret records.
+ * Default is FALSE if userContext is not authorized.
+ */
+function canAccessConfidential(userContext?: UserContext): boolean {
+  return Boolean(userContext?.can_view_confidential);
+}
 
 // --- Audit Repository ---
 export class SqliteAuditRepository implements IAuditRepository {
@@ -67,8 +77,26 @@ export class SqliteAuditRepository implements IAuditRepository {
   async log(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>): Promise<void> {
     const id = `audit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const timestamp = new Date().toISOString();
+    const latestRows = sqliteEngine.query<{ entry_hash: string }>('SELECT entry_hash FROM audit_log ORDER BY timestamp DESC, id DESC LIMIT 1');
+    const prevHash = latestRows[0]?.entry_hash || 'GENESIS-BLOCK-00000000000000000000000000000000';
+    const ip = entry.ip_address || '10.120.4.x (LAN)';
+
+    const entryHash = await computeAuditEntryHash({
+      id,
+      timestamp,
+      user_id: entry.user_id,
+      user_role: entry.user_role,
+      action_type: entry.action_type,
+      entity_type: entry.entity_type,
+      entity_id: entry.entity_id,
+      before_value: entry.before_value || null,
+      after_value: entry.after_value || null,
+      ip_address: ip,
+      prev_hash: prevHash
+    });
+
     sqliteEngine.run(
-      'INSERT INTO audit_log (id, user_id, user_name, user_role, action_type, entity_type, entity_id, before_value, after_value, timestamp, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO audit_log (id, user_id, user_name, user_role, action_type, entity_type, entity_id, before_value, after_value, timestamp, ip_address, prev_hash, entry_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         id,
         entry.user_id,
@@ -80,9 +108,12 @@ export class SqliteAuditRepository implements IAuditRepository {
         entry.before_value || null,
         entry.after_value || null,
         timestamp,
-        entry.ip_address || '10.120.4.x (LAN)'
+        ip,
+        prevHash,
+        entryHash
       ]
     );
+    await sqliteEngine.saveImmediate();
   }
 }
 
@@ -90,9 +121,17 @@ export const auditRepo = new SqliteAuditRepository();
 
 // --- Meetings Repository ---
 export class SqliteMeetingRepository implements IMeetingRepository {
-  async getAll(filter?: { status?: string; matterId?: string; date?: string }): Promise<Meeting[]> {
+  async getAll(
+    filter?: { status?: string; matterId?: string; date?: string; search?: string },
+    userContext?: UserContext
+  ): Promise<Meeting[]> {
     let sql = 'SELECT * FROM meetings WHERE deleted_at IS NULL';
     const params: any[] = [];
+
+    if (!canAccessConfidential(userContext)) {
+      sql += " AND (confidentiality = 'normal' OR confidentiality IS NULL)";
+    }
+
     if (filter?.status) {
       sql += ' AND status = ?';
       params.push(filter.status);
@@ -105,13 +144,22 @@ export class SqliteMeetingRepository implements IMeetingRepository {
       sql += ' AND date(start_time) = date(?)';
       params.push(filter.date);
     }
+    if (filter?.search) {
+      sql += ' AND (title LIKE ? OR notes LIKE ? OR location LIKE ?)';
+      const term = `%${filter.search}%`;
+      params.push(term, term, term);
+    }
     sql += ' ORDER BY start_time ASC';
     return sqliteEngine.query<Meeting>(sql, params);
   }
 
-  async getById(id: string): Promise<Meeting | null> {
+  async getById(id: string, userContext?: UserContext): Promise<Meeting | null> {
     const rows = sqliteEngine.query<Meeting>('SELECT * FROM meetings WHERE id = ? AND deleted_at IS NULL', [id]);
-    return rows[0] || null;
+    const meeting = rows[0] || null;
+    if (meeting && !canAccessConfidential(userContext) && meeting.confidentiality !== 'normal') {
+      return null;
+    }
+    return meeting;
   }
 
   async create(data: Omit<Meeting, 'id' | 'created_at' | 'updated_at'>): Promise<Meeting> {
@@ -135,7 +183,7 @@ export class SqliteMeetingRepository implements IMeetingRepository {
         data.created_by
       ]
     );
-    const created = await this.getById(id);
+    const created = await this.getById(id, { can_view_confidential: true });
     return created!;
   }
 
@@ -152,7 +200,7 @@ export class SqliteMeetingRepository implements IMeetingRepository {
     }
     params.push(id);
     sqliteEngine.run(`UPDATE meetings SET ${fields.join(', ')} WHERE id = ?`, params);
-    const updated = await this.getById(id);
+    const updated = await this.getById(id, { can_view_confidential: true });
     return updated!;
   }
 
@@ -162,7 +210,9 @@ export class SqliteMeetingRepository implements IMeetingRepository {
     return true;
   }
 
-  async getAttendees(meetingId: string): Promise<MeetingAttendee[]> {
+  async getAttendees(meetingId: string, userContext?: UserContext): Promise<MeetingAttendee[]> {
+    const meeting = await this.getById(meetingId, userContext);
+    if (!meeting) return [];
     return sqliteEngine.query<MeetingAttendee>('SELECT * FROM meeting_attendees WHERE meeting_id = ?', [meetingId]);
   }
 
@@ -177,7 +227,9 @@ export class SqliteMeetingRepository implements IMeetingRepository {
     }
   }
 
-  async getAgenda(meetingId: string): Promise<AgendaItem[]> {
+  async getAgenda(meetingId: string, userContext?: UserContext): Promise<AgendaItem[]> {
+    const meeting = await this.getById(meetingId, userContext);
+    if (!meeting) return [];
     return sqliteEngine.query<AgendaItem>('SELECT * FROM agenda_items WHERE meeting_id = ? ORDER BY order_index ASC', [meetingId]);
   }
 
@@ -192,30 +244,34 @@ export class SqliteMeetingRepository implements IMeetingRepository {
     }
   }
 
-  async getMinutes(meetingId: string): Promise<MeetingMinutes | null> {
+  async getMinutes(meetingId: string, userContext?: UserContext): Promise<MeetingMinutes | null> {
+    const meeting = await this.getById(meetingId, userContext);
+    if (!meeting) return null;
     const rows = sqliteEngine.query<MeetingMinutes>('SELECT * FROM meeting_minutes WHERE meeting_id = ?', [meetingId]);
     return rows[0] || null;
   }
 
   async saveMinutes(minutes: Omit<MeetingMinutes, 'id'>): Promise<MeetingMinutes> {
-    const existing = await this.getMinutes(minutes.meeting_id);
+    const existing = await this.getMinutes(minutes.meeting_id, { can_view_confidential: true });
     if (existing) {
       sqliteEngine.run(
         'UPDATE meeting_minutes SET draft_content = ?, approved_content = ?, status = ?, approved_by = ?, approved_at = ? WHERE meeting_id = ?',
         [minutes.draft_content, minutes.approved_content || null, minutes.status, minutes.approved_by || null, minutes.approved_at || null, minutes.meeting_id]
       );
-      return (await this.getMinutes(minutes.meeting_id))!;
+      return (await this.getMinutes(minutes.meeting_id, { can_view_confidential: true }))!;
     } else {
       const id = `min-${Date.now()}`;
       sqliteEngine.run(
         'INSERT INTO meeting_minutes (id, meeting_id, draft_content, approved_content, status, approved_by, approved_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [id, minutes.meeting_id, minutes.draft_content, minutes.approved_content || null, minutes.status, minutes.approved_by || null, minutes.approved_at || null]
       );
-      return (await this.getMinutes(minutes.meeting_id))!;
+      return (await this.getMinutes(minutes.meeting_id, { can_view_confidential: true }))!;
     }
   }
 
-  async getDecisions(meetingId: string): Promise<Decision[]> {
+  async getDecisions(meetingId: string, userContext?: UserContext): Promise<Decision[]> {
+    const meeting = await this.getById(meetingId, userContext);
+    if (!meeting) return [];
     return sqliteEngine.query<Decision>('SELECT * FROM decisions WHERE meeting_id = ? ORDER BY order_index ASC', [meetingId]);
   }
 
@@ -230,11 +286,38 @@ export class SqliteMeetingRepository implements IMeetingRepository {
   }
 }
 
+function mapCorrespondenceRow(row: any): Correspondence {
+  if (!row) return row;
+  let parsedTags: string[] = [];
+  if (Array.isArray(row.tags)) {
+    parsedTags = row.tags;
+  } else if (typeof row.tags === 'string') {
+    try {
+      parsedTags = JSON.parse(row.tags);
+    } catch {
+      parsedTags = [];
+    }
+  }
+  return {
+    ...row,
+    tags: parsedTags,
+    category: row.category || 'operations'
+  };
+}
+
 // --- Correspondence Repository ---
 export class SqliteCorrespondenceRepository implements ICorrespondenceRepository {
-  async getAll(filter?: { type?: 'incoming' | 'outgoing'; status?: string; matterId?: string; priority?: string }): Promise<Correspondence[]> {
+  async getAll(
+    filter?: { type?: 'incoming' | 'outgoing'; status?: string; matterId?: string; priority?: string; category?: string; tag?: string; search?: string },
+    userContext?: UserContext
+  ): Promise<Correspondence[]> {
     let sql = 'SELECT * FROM correspondence WHERE deleted_at IS NULL';
     const params: any[] = [];
+
+    if (!canAccessConfidential(userContext)) {
+      sql += " AND (confidentiality = 'normal' OR confidentiality IS NULL)";
+    }
+
     if (filter?.type) {
       sql += ' AND type = ?';
       params.push(filter.type);
@@ -251,18 +334,40 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
       sql += ' AND priority = ?';
       params.push(filter.priority);
     }
+    if (filter?.category && filter.category !== 'all') {
+      sql += ' AND category = ?';
+      params.push(filter.category);
+    }
+    if (filter?.tag && filter.tag !== 'all') {
+      sql += ' AND tags LIKE ?';
+      params.push(`%"${filter.tag}"%`);
+    }
+    if (filter?.search) {
+      sql += ' AND (subject LIKE ? OR serial_number LIKE ? OR summary LIKE ? OR source_or_dest_entity LIKE ? OR tags LIKE ?)';
+      const term = `%${filter.search}%`;
+      params.push(term, term, term, term, term);
+    }
     sql += ' ORDER BY created_at DESC';
-    return sqliteEngine.query<Correspondence>(sql, params);
+    const rows = sqliteEngine.query<any>(sql, params);
+    return rows.map(mapCorrespondenceRow);
   }
 
-  async getById(id: string): Promise<Correspondence | null> {
-    const rows = sqliteEngine.query<Correspondence>('SELECT * FROM correspondence WHERE id = ? AND deleted_at IS NULL', [id]);
-    return rows[0] || null;
+  async getById(id: string, userContext?: UserContext): Promise<Correspondence | null> {
+    const rows = sqliteEngine.query<any>('SELECT * FROM correspondence WHERE id = ? AND deleted_at IS NULL', [id]);
+    const corr = rows[0] ? mapCorrespondenceRow(rows[0]) : null;
+    if (corr && !canAccessConfidential(userContext) && corr.confidentiality !== 'normal') {
+      return null;
+    }
+    return corr;
   }
 
-  async getBySerial(serial: string): Promise<Correspondence | null> {
-    const rows = sqliteEngine.query<Correspondence>('SELECT * FROM correspondence WHERE serial_number = ? AND deleted_at IS NULL', [serial]);
-    return rows[0] || null;
+  async getBySerial(serial: string, userContext?: UserContext): Promise<Correspondence | null> {
+    const rows = sqliteEngine.query<any>('SELECT * FROM correspondence WHERE serial_number = ? AND deleted_at IS NULL', [serial]);
+    const corr = rows[0] ? mapCorrespondenceRow(rows[0]) : null;
+    if (corr && !canAccessConfidential(userContext) && corr.confidentiality !== 'normal') {
+      return null;
+    }
+    return corr;
   }
 
   async getNextSerial(type: 'incoming' | 'outgoing', year: number = new Date().getFullYear()): Promise<string> {
@@ -279,7 +384,7 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
     const id = `corr-${data.type === 'incoming' ? 'in' : 'out'}-${Date.now()}`;
     const now = new Date().toISOString();
     sqliteEngine.run(
-      'INSERT INTO correspondence (id, serial_number, type, date, source_or_dest_entity, subject, priority, confidentiality, summary, status, matter_id, created_at, updated_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO correspondence (id, serial_number, type, date, source_or_dest_entity, subject, priority, confidentiality, summary, status, matter_id, category, tags, created_at, updated_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         id,
         data.serial_number,
@@ -292,6 +397,8 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
         data.summary,
         data.status,
         data.matter_id || null,
+        data.category || 'operations',
+        JSON.stringify(data.tags || []),
         now,
         now,
         data.created_by
@@ -309,7 +416,11 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
     for (const [key, value] of Object.entries(item)) {
       if (key !== 'id' && key !== 'created_at' && key !== 'updated_at' && ALLOWED_CORRESPONDENCE_COLUMNS.has(key)) {
         fields.push(`${key} = ?`);
-        params.push(value);
+        if (key === 'tags' && Array.isArray(value)) {
+          params.push(JSON.stringify(value));
+        } else {
+          params.push(value);
+        }
       }
     }
     params.push(id);
@@ -324,30 +435,34 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
     return true;
   }
 
-  async getBriefingNote(correspondenceId: string): Promise<BriefingNote | null> {
+  async getBriefingNote(correspondenceId: string, userContext?: UserContext): Promise<BriefingNote | null> {
+    const parent = await this.getById(correspondenceId, userContext);
+    if (!parent) return null;
     const rows = sqliteEngine.query<BriefingNote>('SELECT * FROM briefing_notes WHERE correspondence_id = ?', [correspondenceId]);
     return rows[0] || null;
   }
 
   async saveBriefingNote(note: Omit<BriefingNote, 'id'>): Promise<BriefingNote> {
-    const existing = await this.getBriefingNote(note.correspondence_id);
+    const existing = await this.getBriefingNote(note.correspondence_id, { can_view_confidential: true });
     if (existing) {
       sqliteEngine.run(
         'UPDATE briefing_notes SET background = ?, secretary_recommendation = ?, executive_opinion = ?, prepared_by_name = ?, prepared_at = ? WHERE correspondence_id = ?',
         [note.background, note.secretary_recommendation, note.executive_opinion, note.prepared_by_name, note.prepared_at, note.correspondence_id]
       );
-      return (await this.getBriefingNote(note.correspondence_id))!;
+      return (await this.getBriefingNote(note.correspondence_id, { can_view_confidential: true }))!;
     } else {
       const id = `brief-${Date.now()}`;
       sqliteEngine.run(
         'INSERT INTO briefing_notes (id, correspondence_id, background, secretary_recommendation, executive_opinion, prepared_by_name, prepared_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [id, note.correspondence_id, note.background, note.secretary_recommendation, note.executive_opinion, note.prepared_by_name, note.prepared_at]
       );
-      return (await this.getBriefingNote(note.correspondence_id))!;
+      return (await this.getBriefingNote(note.correspondence_id, { can_view_confidential: true }))!;
     }
   }
 
-  async getApproval(correspondenceId: string): Promise<Approval | null> {
+  async getApproval(correspondenceId: string, userContext?: UserContext): Promise<Approval | null> {
+    const parent = await this.getById(correspondenceId, userContext);
+    if (!parent) return null;
     const rows = sqliteEngine.query<Approval>('SELECT * FROM approvals WHERE correspondence_id = ?', [correspondenceId]);
     return rows[0] || null;
   }
@@ -358,10 +473,12 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
       'INSERT INTO approvals (id, correspondence_id, decision_type, standard_phrase, custom_directive, decided_at, decided_by_name) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [id, approval.correspondence_id, approval.decision_type, approval.standard_phrase, approval.custom_directive || null, approval.decided_at, approval.decided_by_name]
     );
-    return (await this.getApproval(approval.correspondence_id))!;
+    return (await this.getApproval(approval.correspondence_id, { can_view_confidential: true }))!;
   }
 
-  async getRoutings(correspondenceId: string): Promise<CorrespondenceRouting[]> {
+  async getRoutings(correspondenceId: string, userContext?: UserContext): Promise<CorrespondenceRouting[]> {
+    const parent = await this.getById(correspondenceId, userContext);
+    if (!parent) return [];
     return sqliteEngine.query<CorrespondenceRouting>('SELECT * FROM correspondence_routing WHERE correspondence_id = ? ORDER BY routed_at ASC', [correspondenceId]);
   }
 
@@ -375,8 +492,14 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
     return rows[0];
   }
 
-  async getAttachments(correspondenceId: string): Promise<Attachment[]> {
-    return sqliteEngine.query<Attachment>("SELECT * FROM attachments WHERE entity_type = 'correspondence' AND entity_id = ?", [correspondenceId]);
+  async getAttachments(correspondenceId: string, userContext?: UserContext): Promise<Attachment[]> {
+    const parent = await this.getById(correspondenceId, userContext);
+    if (!parent) return [];
+    let sql = "SELECT * FROM attachments WHERE entity_type = 'correspondence' AND entity_id = ?";
+    if (!canAccessConfidential(userContext)) {
+      sql += " AND (confidentiality = 'normal' OR confidentiality IS NULL)";
+    }
+    return sqliteEngine.query<Attachment>(sql, [correspondenceId]);
   }
 
   async addAttachment(att: Omit<Attachment, 'id'>): Promise<Attachment> {
@@ -392,9 +515,17 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
 
 // --- Directives Repository ---
 export class SqliteDirectiveRepository implements IDirectiveRepository {
-  async getAll(filter?: { status?: string; assignedDepartment?: string; matterId?: string }): Promise<Directive[]> {
+  async getAll(
+    filter?: { status?: string; assignedDepartment?: string; matterId?: string; search?: string },
+    userContext?: UserContext
+  ): Promise<Directive[]> {
     let sql = 'SELECT * FROM directives WHERE deleted_at IS NULL';
     const params: any[] = [];
+
+    if (!canAccessConfidential(userContext)) {
+      sql += " AND (confidentiality = 'normal' OR confidentiality IS NULL)";
+    }
+
     if (filter?.status) {
       sql += ' AND status = ?';
       params.push(filter.status);
@@ -407,13 +538,22 @@ export class SqliteDirectiveRepository implements IDirectiveRepository {
       sql += ' AND matter_id = ?';
       params.push(filter.matterId);
     }
+    if (filter?.search) {
+      sql += ' AND (title LIKE ? OR code LIKE ? OR instruction LIKE ? OR assigned_person LIKE ?)';
+      const term = `%${filter.search}%`;
+      params.push(term, term, term, term);
+    }
     sql += ' ORDER BY due_date ASC';
     return sqliteEngine.query<Directive>(sql, params);
   }
 
-  async getById(id: string): Promise<Directive | null> {
+  async getById(id: string, userContext?: UserContext): Promise<Directive | null> {
     const rows = sqliteEngine.query<Directive>('SELECT * FROM directives WHERE id = ? AND deleted_at IS NULL', [id]);
-    return rows[0] || null;
+    const dir = rows[0] || null;
+    if (dir && !canAccessConfidential(userContext) && dir.confidentiality !== 'normal') {
+      return null;
+    }
+    return dir;
   }
 
   async getNextCode(year: number = new Date().getFullYear()): Promise<string> {
@@ -447,7 +587,7 @@ export class SqliteDirectiveRepository implements IDirectiveRepository {
         now
       ]
     );
-    const created = await this.getById(id);
+    const created = await this.getById(id, { can_view_confidential: true });
     return created!;
   }
 
@@ -464,7 +604,7 @@ export class SqliteDirectiveRepository implements IDirectiveRepository {
     }
     params.push(id);
     sqliteEngine.run(`UPDATE directives SET ${fields.join(', ')} WHERE id = ?`, params);
-    const updated = await this.getById(id);
+    const updated = await this.getById(id, { can_view_confidential: true });
     return updated!;
   }
 
@@ -474,7 +614,9 @@ export class SqliteDirectiveRepository implements IDirectiveRepository {
     return true;
   }
 
-  async getUpdates(directiveId: string): Promise<DirectiveUpdate[]> {
+  async getUpdates(directiveId: string, userContext?: UserContext): Promise<DirectiveUpdate[]> {
+    const dir = await this.getById(directiveId, userContext);
+    if (!dir) return [];
     return sqliteEngine.query<DirectiveUpdate>('SELECT * FROM directive_updates WHERE directive_id = ? ORDER BY created_at DESC', [directiveId]);
   }
 
@@ -494,20 +636,34 @@ export class SqliteDirectiveRepository implements IDirectiveRepository {
 
 // --- Matter Repository ---
 export class SqliteMatterRepository implements IMatterRepository {
-  async getAll(filter?: { status?: string }): Promise<Matter[]> {
+  async getAll(filter?: { status?: string; search?: string }, userContext?: UserContext): Promise<Matter[]> {
     let sql = 'SELECT * FROM matters WHERE deleted_at IS NULL';
     const params: any[] = [];
+
+    if (!canAccessConfidential(userContext)) {
+      sql += " AND (confidentiality = 'normal' OR confidentiality IS NULL)";
+    }
+
     if (filter?.status) {
       sql += ' AND status = ?';
       params.push(filter.status);
+    }
+    if (filter?.search) {
+      sql += ' AND (title LIKE ? OR code LIKE ? OR description LIKE ? OR lead_entity LIKE ?)';
+      const term = `%${filter.search}%`;
+      params.push(term, term, term, term);
     }
     sql += ' ORDER BY created_at DESC';
     return sqliteEngine.query<Matter>(sql, params);
   }
 
-  async getById(id: string): Promise<Matter | null> {
+  async getById(id: string, userContext?: UserContext): Promise<Matter | null> {
     const rows = sqliteEngine.query<Matter>('SELECT * FROM matters WHERE id = ? AND deleted_at IS NULL', [id]);
-    return rows[0] || null;
+    const matter = rows[0] || null;
+    if (matter && !canAccessConfidential(userContext) && matter.confidentiality !== 'normal') {
+      return null;
+    }
+    return matter;
   }
 
   async create(data: Omit<Matter, 'id' | 'created_at' | 'updated_at'>): Promise<Matter> {
@@ -517,7 +673,7 @@ export class SqliteMatterRepository implements IMatterRepository {
       'INSERT INTO matters (id, code, title, description, confidentiality, status, lead_entity, priority, created_at, updated_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [id, data.code, data.title, data.description, data.confidentiality, data.status, data.lead_entity, data.priority, now, now, data.created_by]
     );
-    const created = await this.getById(id);
+    const created = await this.getById(id, { can_view_confidential: true });
     return created!;
   }
 
@@ -534,7 +690,7 @@ export class SqliteMatterRepository implements IMatterRepository {
     }
     params.push(id);
     sqliteEngine.run(`UPDATE matters SET ${fields.join(', ')} WHERE id = ?`, params);
-    const updated = await this.getById(id);
+    const updated = await this.getById(id, { can_view_confidential: true });
     return updated!;
   }
 
@@ -544,7 +700,9 @@ export class SqliteMatterRepository implements IMatterRepository {
     return true;
   }
 
-  async getLinks(matterId: string): Promise<MatterLink[]> {
+  async getLinks(matterId: string, userContext?: UserContext): Promise<MatterLink[]> {
+    const matter = await this.getById(matterId, userContext);
+    if (!matter) return [];
     return sqliteEngine.query<MatterLink>('SELECT * FROM matter_links WHERE matter_id = ? ORDER BY created_at DESC', [matterId]);
   }
 
@@ -625,8 +783,16 @@ export class SqliteContactRepository implements IContactRepository {
 
 // --- Notification Repository ---
 export class SqliteNotificationRepository implements INotificationRepository {
-  async getAllForRole(role: RoleType): Promise<Notification[]> {
-    return sqliteEngine.query<Notification>('SELECT * FROM notifications WHERE recipient_role = ? ORDER BY created_at DESC', [role]);
+  async getAllForRole(role: RoleType, userContext?: UserContext): Promise<Notification[]> {
+    let sql = 'SELECT * FROM notifications WHERE recipient_role = ?';
+    const params: any[] = [role];
+
+    if (!canAccessConfidential(userContext)) {
+      sql += " AND (confidentiality = 'normal' OR confidentiality IS NULL)";
+    }
+
+    sql += ' ORDER BY created_at DESC';
+    return sqliteEngine.query<Notification>(sql, params);
   }
 
   async create(data: Omit<Notification, 'id' | 'created_at'>): Promise<Notification> {
@@ -652,28 +818,48 @@ export class SqliteNotificationRepository implements INotificationRepository {
 // --- User Repository ---
 export class SqliteUserRepository implements IUserRepository {
   async getAll(): Promise<User[]> {
-    const rows = sqliteEngine.query<any>('SELECT * FROM users ORDER BY name ASC');
+    const rows = sqliteEngine.query<any>('SELECT id, username, name, title, department_id, email, role, can_view_confidential, must_change_password, avatar, created_at FROM users ORDER BY name ASC');
     return rows.map((r) => ({
       ...r,
-      can_view_confidential: Boolean(r.can_view_confidential)
+      can_view_confidential: Boolean(r.can_view_confidential),
+      must_change_password: Boolean(r.must_change_password)
     }));
   }
 
   async getById(id: string): Promise<User | null> {
-    const rows = sqliteEngine.query<any>('SELECT * FROM users WHERE id = ?', [id]);
+    const rows = sqliteEngine.query<any>('SELECT id, username, name, title, department_id, email, role, can_view_confidential, must_change_password, avatar, created_at FROM users WHERE id = ?', [id]);
     if (!rows[0]) return null;
     return {
       ...rows[0],
-      can_view_confidential: Boolean(rows[0].can_view_confidential)
+      can_view_confidential: Boolean(rows[0].can_view_confidential),
+      must_change_password: Boolean(rows[0].must_change_password)
+    };
+  }
+
+  async getByUsername(username: string): Promise<(User & { password_hash: string; password_salt: string }) | null> {
+    const rows = sqliteEngine.query<any>('SELECT * FROM users WHERE LOWER(username) = LOWER(?)', [username.trim()]);
+    if (!rows[0]) return null;
+    return {
+      ...rows[0],
+      can_view_confidential: Boolean(rows[0].can_view_confidential),
+      must_change_password: Boolean(rows[0].must_change_password)
     };
   }
 
   async getByRole(role: RoleType): Promise<User[]> {
-    const rows = sqliteEngine.query<any>('SELECT * FROM users WHERE role = ?', [role]);
+    const rows = sqliteEngine.query<any>('SELECT id, username, name, title, department_id, email, role, can_view_confidential, must_change_password, avatar, created_at FROM users WHERE role = ?', [role]);
     return rows.map((r) => ({
       ...r,
-      can_view_confidential: Boolean(r.can_view_confidential)
+      can_view_confidential: Boolean(r.can_view_confidential),
+      must_change_password: Boolean(r.must_change_password)
     }));
+  }
+
+  async updatePassword(userId: string, hash: string, salt: string): Promise<void> {
+    sqliteEngine.run(
+      'UPDATE users SET password_hash = ?, password_salt = ?, must_change_password = 0 WHERE id = ?',
+      [hash, salt, userId]
+    );
   }
 }
 

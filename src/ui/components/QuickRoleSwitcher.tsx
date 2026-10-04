@@ -1,10 +1,24 @@
 import React from 'react';
 import { useAuth } from '../../features/auth/AuthContext';
 import { useI18n } from '../../i18n/i18nContext';
-import { ShieldCheck, Lock, Clock, RefreshCw, UserCheck, ShieldAlert } from 'lucide-react';
+import {
+  ShieldCheck,
+  Lock,
+  Clock,
+  User,
+  LogOut,
+  ShieldAlert,
+  KeyRound
+} from 'lucide-react';
 
 export const QuickRoleSwitcher: React.FC = () => {
-  const { currentUser, switchUser, usersList, lockSession, inactivitySecondsRemaining, sessionTimeoutMinutes } = useAuth();
+  const {
+    currentUser,
+    lockSession,
+    logout,
+    inactivitySecondsRemaining,
+    sessionTimeoutMinutes
+  } = useAuth();
   const { t, formatNumber } = useI18n();
 
   const minutes = Math.floor(inactivitySecondsRemaining / 60);
@@ -12,40 +26,33 @@ export const QuickRoleSwitcher: React.FC = () => {
   const isExpiringSoon = inactivitySecondsRemaining < 120; // less than 2 minutes
 
   return (
-    <aside aria-label="شريط أمني وتنفيذي للتحكم" className="bg-slate-900 border-b border-emerald-950/60 text-slate-200 px-4 py-2 text-xs flex flex-wrap items-center justify-between gap-3 shadow-md">
-      {/* Current User Badge & Security Status */}
+    <aside
+      aria-label="شريط أمني وتنفيذي للجلسة"
+      className="bg-slate-900 border-b border-emerald-950/60 text-slate-200 px-4 py-2 text-xs flex flex-wrap items-center justify-between gap-3 shadow-md"
+    >
+      {/* Current User Profile & Security Badge */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
-          <span className="text-slate-400 font-medium">{t('auth.switch_role')}</span>
-          <div className="flex items-center gap-1.5 bg-slate-950/80 border border-slate-800 rounded-lg p-0.5">
-            {usersList.map((user) => {
-              const isActive = user.id === currentUser.id;
-              return (
-                <button
-                  key={user.id}
-                  onClick={() => switchUser(user.id)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
-                    isActive
-                      ? user.role === 'CHAIRMAN'
-                        ? 'bg-amber-600 text-amber-50 shadow-sm'
-                        : user.role === 'SECRETARY'
-                        ? 'bg-emerald-700 text-emerald-50 shadow-sm'
-                        : 'bg-slate-700 text-slate-100'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                  }`}
-                  title={`${user.name} - ${user.title}`}
-                >
-                  {isActive && <UserCheck className="w-3.5 h-3.5" />}
-                  <span>
-                    {user.role === 'CHAIRMAN'
-                      ? 'رئيس مجلس الإدارة'
-                      : user.role === 'SECRETARY'
-                      ? 'السكرتير الخاص'
-                      : 'مدير النظام (IT)'}
-                  </span>
-                </button>
-              );
-            })}
+          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-slate-400 font-medium">المستخدم الموثق:</span>
+          <div className="flex items-center gap-2 bg-slate-950/80 border border-slate-800 rounded-lg px-2.5 py-1">
+            <span
+              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                currentUser.role === 'CHAIRMAN'
+                  ? 'bg-amber-600 text-amber-50 shadow-sm'
+                  : currentUser.role === 'SECRETARY'
+                  ? 'bg-emerald-700 text-emerald-50 shadow-sm'
+                  : 'bg-slate-700 text-slate-100'
+              }`}
+            >
+              {currentUser.role === 'CHAIRMAN'
+                ? 'رئيس مجلس الإدارة'
+                : currentUser.role === 'SECRETARY'
+                ? 'السكرتير الخاص'
+                : 'مدير النظام (IT)'}
+            </span>
+            <span className="font-bold text-slate-100">{currentUser.name}</span>
+            <span className="text-[10px] text-slate-400 font-mono">(@{currentUser.username})</span>
           </div>
         </div>
 
@@ -65,30 +72,42 @@ export const QuickRoleSwitcher: React.FC = () => {
         </div>
       </div>
 
-      {/* Auto-logout Inactivity Countdown & Lock Action */}
+      {/* Session Controls: Inactivity Timer, Lock, Logout */}
       <div className="flex items-center gap-3">
+        {/* Inactivity countdown */}
         <div
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono border transition-colors ${
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] transition-colors ${
             isExpiringSoon
-              ? 'bg-rose-950/60 border-rose-800 text-rose-300 animate-pulse'
-              : 'bg-slate-950/80 border-slate-800 text-slate-300'
+              ? 'bg-rose-950/60 border-rose-700/80 text-rose-300 animate-pulse'
+              : 'bg-slate-800/80 border-slate-700 text-slate-300'
           }`}
-          title={`سيتم قفل الشاشة بعد انقضاء ${sessionTimeoutMinutes} دقيقة من عدم النشاط`}
+          title="الوقت المتبقي حتى القفل التلقائي للشاشة بسبب عدم النشاط"
         >
-          <Clock className={`w-3.5 h-3.5 ${isExpiringSoon ? 'text-rose-400' : 'text-slate-400'}`} />
-          <span className="font-sans text-slate-400">{t('auth.inactivity_timer')}:</span>
-          <span className="font-bold">
-            {formatNumber(String(minutes).padStart(2, '0'))}:{formatNumber(String(seconds).padStart(2, '0'))}
+          <Clock className="w-3.5 h-3.5" />
+          <span>القفل التلقائي:</span>
+          <span className="font-mono font-bold">
+            {formatNumber(minutes)}:{seconds < 10 ? '0' : ''}{formatNumber(seconds)}
           </span>
         </div>
 
+        {/* Lock Screen Button */}
         <button
           onClick={lockSession}
-          className="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1 cursor-pointer"
-          title="قفل الشاشة فوراً لحماية البيانات"
+          className="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 transition flex items-center gap-1 text-[11px] cursor-pointer"
+          title="قفل الشاشة فورياً لحماية المكتب"
         >
-          <Lock className="w-3 h-3 text-slate-400" />
-          <span>قفل الجلسة</span>
+          <Lock className="w-3.5 h-3.5 text-amber-400" />
+          <span>قفل الشاشة</span>
+        </button>
+
+        {/* Official Logout Button */}
+        <button
+          onClick={logout}
+          className="px-2.5 py-1 rounded-md bg-rose-950/50 hover:bg-rose-900/60 text-rose-200 border border-rose-800/60 hover:border-rose-700 transition flex items-center gap-1.5 text-[11px] cursor-pointer"
+          title="تسجيل الخروج والعودة لشاشة الدخول"
+        >
+          <LogOut className="w-3.5 h-3.5 text-rose-400" />
+          <span>خروج</span>
         </button>
       </div>
     </aside>

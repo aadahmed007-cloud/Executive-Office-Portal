@@ -6,6 +6,7 @@ export type PriorityLevel = 'normal' | 'urgent' | 'top_urgent';
 
 export interface User {
   id: string;
+  username: string;
   name: string;
   title: string;
   department_id: string;
@@ -13,6 +14,7 @@ export interface User {
   role: RoleType;
   can_view_confidential: boolean;
   avatar?: string;
+  must_change_password?: boolean;
   created_at: string;
 }
 
@@ -132,6 +134,8 @@ export interface Correspondence {
     | 'under_review'
     | 'dispatched';
   matter_id?: string | null;
+  category?: 'financial' | 'operations' | 'legal' | 'technology' | 'sovereign' | 'projects' | 'citizens' | string;
+  tags?: string[];
   created_at: string;
   updated_at: string;
   created_by: string;
@@ -258,6 +262,8 @@ export interface AuditLogEntry {
   after_value?: string | null;
   timestamp: string;
   ip_address: string;
+  prev_hash?: string | null;
+  entry_hash?: string;
 }
 
 export interface SystemSettings {
