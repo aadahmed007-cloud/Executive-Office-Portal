@@ -1,6 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import { directiveRepo } from '../repositories/index.js';
 import { BackendCommandService } from '../services/backendCommand.service.js';
+import {
+  createDirectiveSchema,
+  updateDirectiveSchema,
+  updateDirectiveStatusSchema,
+  addDirectiveUpdateSchema
+} from '../validation/schemas.js';
 
 export class DirectivesController {
   static async getAll(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -43,7 +49,8 @@ export class DirectivesController {
 
   static async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const created = await BackendCommandService.createDirective(req.body, req.userContext!);
+      const validated = createDirectiveSchema.parse(req.body);
+      const created = await BackendCommandService.createDirective(validated as any, req.userContext!);
       res.status(201).json(created);
     } catch (err) {
       next(err);
@@ -52,7 +59,23 @@ export class DirectivesController {
 
   static async update(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const updated = await directiveRepo.update(req.params.id, req.body, req.userContext!);
+      const validated = updateDirectiveSchema.parse(req.body);
+      const updated = await directiveRepo.update(req.params.id, validated as any, req.userContext!);
+      res.json(updated);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async updateStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const validated = updateDirectiveStatusSchema.parse(req.body);
+      const updated = await (directiveRepo as any).updateStatus(
+        req.params.id,
+        validated.status,
+        validated.reason,
+        req.userContext!
+      );
       res.json(updated);
     } catch (err) {
       next(err);
@@ -79,7 +102,8 @@ export class DirectivesController {
 
   static async addUpdate(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const created = await directiveRepo.addUpdate(req.body, req.userContext!);
+      const validated = addDirectiveUpdateSchema.parse(req.body);
+      const created = await directiveRepo.addUpdate(validated as any, req.userContext!);
       res.status(201).json(created);
     } catch (err) {
       next(err);

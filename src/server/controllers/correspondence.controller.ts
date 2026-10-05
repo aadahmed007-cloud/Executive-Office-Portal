@@ -1,6 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
 import { correspondenceRepo } from '../repositories/index.js';
 import { BackendCommandService } from '../services/backendCommand.service.js';
+import {
+  createCorrespondenceSchema,
+  updateCorrespondenceSchema,
+  reclassifyCorrespondenceSchema,
+  submitCorrespondenceSchema,
+  saveBriefingSchema,
+  recordApprovalSchema,
+  addRoutingSchema,
+  addAttachmentSchema
+} from '../validation/schemas.js';
 
 export class CorrespondenceController {
   static async getAll(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -44,7 +54,8 @@ export class CorrespondenceController {
 
   static async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const created = await BackendCommandService.createCorrespondence(req.body, req.userContext!);
+      const validated = createCorrespondenceSchema.parse(req.body);
+      const created = await BackendCommandService.createCorrespondence(validated as any, req.userContext!);
       res.status(201).json(created);
     } catch (err) {
       next(err);
@@ -53,7 +64,33 @@ export class CorrespondenceController {
 
   static async update(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const updated = await correspondenceRepo.update(req.params.id, req.body, req.userContext!);
+      const validated = updateCorrespondenceSchema.parse(req.body);
+      const updated = await correspondenceRepo.update(req.params.id, validated as any, req.userContext!);
+      res.json(updated);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async submit(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const validated = submitCorrespondenceSchema.parse(req.body);
+      const updated = await (correspondenceRepo as any).submit(req.params.id, validated.comment, req.userContext!);
+      res.json(updated);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async reclassify(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const validated = reclassifyCorrespondenceSchema.parse(req.body);
+      const updated = await (correspondenceRepo as any).reclassify(
+        req.params.id,
+        validated.confidentiality,
+        validated.reason,
+        req.userContext!
+      );
       res.json(updated);
     } catch (err) {
       next(err);
@@ -80,7 +117,18 @@ export class CorrespondenceController {
 
   static async saveBriefing(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const saved = await correspondenceRepo.saveBriefingNote(req.body, req.userContext!);
+      const validated = saveBriefingSchema.parse(req.body);
+      const correspondence_id = req.params.id || validated.correspondence_id!;
+      const payload = {
+        ...validated,
+        correspondence_id,
+        background: validated.background || validated.summary || '',
+        secretary_recommendation: validated.secretary_recommendation || validated.recommendation || '',
+        executive_opinion: validated.executive_opinion || validated.legal_opinion || '',
+        prepared_by_name: validated.prepared_by_name || req.user?.name || req.userContext?.userId || 'مستخدم النظام',
+        prepared_at: validated.prepared_at || new Date().toISOString()
+      };
+      const saved = await correspondenceRepo.saveBriefingNote(payload as any, req.userContext!);
       res.json(saved);
     } catch (err) {
       next(err);
@@ -98,7 +146,19 @@ export class CorrespondenceController {
 
   static async recordApproval(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const recorded = await correspondenceRepo.recordApproval(req.body, req.userContext!);
+      const validated = recordApprovalSchema.parse(req.body);
+      const correspondence_id = req.params.id || validated.correspondence_id!;
+      const decision_type = (validated.decision_type || validated.decision || 'approved') as any;
+      const payload = {
+        ...validated,
+        correspondence_id,
+        decision_type,
+        standard_phrase: validated.standard_phrase || (validated as any).notes || 'معتمد',
+        custom_directive: validated.custom_directive || null,
+        decided_by_name: validated.decided_by_name || req.user?.name || req.userContext?.userId || 'رئيس مجلس الإدارة',
+        decided_at: validated.decided_at || new Date().toISOString()
+      };
+      const recorded = await correspondenceRepo.recordApproval(payload as any, req.userContext!);
       res.json(recorded);
     } catch (err) {
       next(err);
@@ -116,7 +176,8 @@ export class CorrespondenceController {
 
   static async addRouting(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const created = await correspondenceRepo.addRouting(req.body, req.userContext!);
+      const validated = addRoutingSchema.parse(req.body);
+      const created = await correspondenceRepo.addRouting(validated as any, req.userContext!);
       res.status(201).json(created);
     } catch (err) {
       next(err);
@@ -134,7 +195,8 @@ export class CorrespondenceController {
 
   static async addAttachment(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const created = await correspondenceRepo.addAttachment(req.body, req.userContext!);
+      const validated = addAttachmentSchema.parse(req.body);
+      const created = await correspondenceRepo.addAttachment(validated as any, req.userContext!);
       res.status(201).json(created);
     } catch (err) {
       next(err);

@@ -8,7 +8,7 @@ import { SESSION_COOKIE_NAME } from '../server/services/session.service.js';
 describe('Phase 2: Server-Side Authentication & Session Security', () => {
   let app: any;
   const testPassword = 'TestPassword123!';
-  const testUsername = 'test_user_phase2';
+  const testUsername = `test_user_p2_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
   let testUserId = 'usr-test-p2';
 
   beforeAll(async () => {
@@ -90,7 +90,7 @@ describe('Phase 2: Server-Side Authentication & Session Security', () => {
   it('rejects unauthorized access to protected routes without session cookie', async () => {
     const res = await request(app).get('/api/meetings');
     expect(res.status).toBe(401);
-    expect(res.body.error).toContain('Authentication Required');
+    expect(res.body.error).toContain('يرجى تسجيل الدخول أولاً للوصول إلى هذا المورد');
   });
 
   it('completely ignores forged client headers (X-User-Role / X-Can-View-Confidential)', async () => {
@@ -122,7 +122,7 @@ describe('Phase 2: Server-Side Authentication & Session Security', () => {
 
   it('enforces must_change_password restriction on operational routes', async () => {
     // Create user with must_change_password = 1
-    const forcedUser = 'forced_change_user';
+    const forcedUser = `forced_change_user_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const forcedPass = 'ForcedInitialPass123!';
     const creds = hashPasswordServer(forcedPass);
 
@@ -220,6 +220,6 @@ describe('Phase 2: Server-Side Authentication & Session Security', () => {
       .send({ username: testUsername, password: testPassword });
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toContain('CSRF Origin Mismatch');
+    expect(res.body.error).toContain('طلب مرفوض: عدم تطابق مصدر الطلب');
   });
 });

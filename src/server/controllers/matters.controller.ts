@@ -1,5 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { matterRepo } from '../repositories/index.js';
+import {
+  createMatterSchema,
+  updateMatterSchema,
+  addMatterLinkSchema
+} from '../validation/schemas.js';
 
 export class MattersController {
   static async getAll(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -30,7 +35,8 @@ export class MattersController {
 
   static async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const created = await matterRepo.create(req.body, req.userContext!);
+      const validated = createMatterSchema.parse(req.body);
+      const created = await matterRepo.create(validated as any, req.userContext!);
       res.status(201).json(created);
     } catch (err) {
       next(err);
@@ -39,7 +45,8 @@ export class MattersController {
 
   static async update(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const updated = await matterRepo.update(req.params.id, req.body, req.userContext!);
+      const validated = updateMatterSchema.parse(req.body);
+      const updated = await matterRepo.update(req.params.id, validated, req.userContext!);
       res.json(updated);
     } catch (err) {
       next(err);
@@ -66,7 +73,8 @@ export class MattersController {
 
   static async addLink(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const created = await matterRepo.addLink(req.body, req.userContext!);
+      const validated = addMatterLinkSchema.parse(req.body);
+      const created = await matterRepo.addLink({ ...validated, matter_id: req.params.id } as any, req.userContext!);
       res.status(201).json(created);
     } catch (err) {
       next(err);

@@ -62,6 +62,8 @@ export const DECLARATIVE_ROUTES: DeclarativeRoute[] = [
   { method: 'get', path: '/correspondence/next-serial', handler: CorrespondenceController.getNextSerial, requireAuth: true, mustChangePassword: true, resource: 'correspondence', action: 'read' },
   { method: 'get', path: '/correspondence/:id', handler: CorrespondenceController.getById, requireAuth: true, mustChangePassword: true, resource: 'correspondence', action: 'read' },
   { method: 'patch', path: '/correspondence/:id', handler: CorrespondenceController.update, requireAuth: true, mustChangePassword: true, resource: 'correspondence', action: 'update' },
+  { method: 'post', path: '/correspondence/:id/submit', handler: CorrespondenceController.submit, requireAuth: true, mustChangePassword: true, resource: 'correspondence', action: 'update' },
+  { method: 'post', path: '/correspondence/:id/reclassify', handler: CorrespondenceController.reclassify, requireAuth: true, mustChangePassword: true, resource: 'correspondence', action: 'update' },
   { method: 'delete', path: '/correspondence/:id', handler: CorrespondenceController.softDelete, requireAuth: true, mustChangePassword: true, resource: 'correspondence', action: 'archive' },
   { method: 'get', path: '/correspondence/:id/briefing', handler: CorrespondenceController.getBriefing, requireAuth: true, mustChangePassword: true, resource: 'correspondence', action: 'read' },
   { method: 'post', path: '/correspondence/:id/briefing', handler: CorrespondenceController.saveBriefing, requireAuth: true, mustChangePassword: true, resource: 'correspondence', action: 'comment' },
@@ -78,6 +80,7 @@ export const DECLARATIVE_ROUTES: DeclarativeRoute[] = [
   { method: 'get', path: '/directives/next-code', handler: DirectivesController.getNextCode, requireAuth: true, mustChangePassword: true, resource: 'directives', action: 'read' },
   { method: 'get', path: '/directives/:id', handler: DirectivesController.getById, requireAuth: true, mustChangePassword: true, resource: 'directives', action: 'read' },
   { method: 'patch', path: '/directives/:id', handler: DirectivesController.update, requireAuth: true, mustChangePassword: true, resource: 'directives', action: 'update' },
+  { method: 'post', path: '/directives/:id/status', handler: DirectivesController.updateStatus, requireAuth: true, mustChangePassword: true, resource: 'directives', action: 'update' },
   { method: 'delete', path: '/directives/:id', handler: DirectivesController.softDelete, requireAuth: true, mustChangePassword: true, resource: 'directives', action: 'archive' },
   { method: 'get', path: '/directives/:id/updates', handler: DirectivesController.getUpdates, requireAuth: true, mustChangePassword: true, resource: 'directives', action: 'read' },
   { method: 'post', path: '/directives/:id/updates', handler: DirectivesController.addUpdate, requireAuth: true, mustChangePassword: true, resource: 'directives', action: 'update' },
@@ -108,6 +111,7 @@ export const DECLARATIVE_ROUTES: DeclarativeRoute[] = [
 
   // 10. Audit Log
   { method: 'get', path: '/audit', handler: AuditController.getAll, requireAuth: true, mustChangePassword: true, resource: 'audit', action: 'read' },
+  { method: 'get', path: '/audit/verify', handler: AuditController.verify, requireAuth: true, mustChangePassword: true, resource: 'audit', action: 'read' },
 
   // 11. Settings
   { method: 'get', path: '/settings', handler: SettingsController.getSettings, requireAuth: true, mustChangePassword: true, resource: 'settings', action: 'read' },

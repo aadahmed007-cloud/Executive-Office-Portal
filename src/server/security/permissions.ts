@@ -35,6 +35,7 @@ export const PERMISSION_MATRIX: Record<RoleType, Partial<Record<PermissionResour
     contacts: { create: true, read: true, update: true, archive: true },
     notifications: { read: true, update: true },
     users: { read: true },
+    audit: { read: true }
   },
   CHAIRMAN: {
     meetings: { read: true, approve_minutes: true, decide: true },

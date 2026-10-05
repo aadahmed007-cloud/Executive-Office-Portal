@@ -161,7 +161,7 @@ export const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({ isOp
       entity_id: reportCode,
       before_value: null,
       after_value: `تصدير وطباعة تقرير ينفيذي (${reportType === 'weekly' ? 'أسبوعي' : reportType === 'monthly' ? 'شهري' : 'استراتيجي'}) للفترة من ${startDate} إلى ${endDate}`,
-      ip_address: '10.120.4.x (LAN)'
+      ip_address: ''
     }, userCtx);
 
     window.print();

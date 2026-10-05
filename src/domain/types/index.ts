@@ -251,6 +251,7 @@ export interface Notification {
 export type ActionType = 'CREATE' | 'UPDATE' | 'DELETE' | 'DECIDE' | 'ROUTING' | 'EXPORT' | 'AUTH';
 
 export interface AuditLogEntry {
+  seq?: number;
   id: string;
   user_id: string;
   user_name: string;
@@ -274,4 +275,7 @@ export interface SystemSettings {
   default_digit_format: 'western' | 'indic';
   default_calendar_format: 'gregorian' | 'with_hijri';
   last_backup_date?: string;
+  audit_last_seq?: number;
+  audit_head_hash?: string;
+  audit_count?: number;
 }

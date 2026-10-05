@@ -77,7 +77,7 @@ describe('Phase 3: Server-Side Authorization & Confidentiality Enforcement', () 
     sqliteEngine.run(
       `INSERT INTO correspondence (id, serial_number, type, date, source_or_dest_entity, subject, priority, confidentiality, summary, status, created_at, updated_at, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [confidentialCorrId, 'TOP-SECRET-001', 'incoming', '2026-10-01', 'جهة سيادية سرية', 'تقرير سري للغاية حول التطوير الاستراتيجي', 'urgent', 'confidential', 'ملخص سري للغاية للمجلس', 'new', now, now, 'السكرتير التنفيذي']
+      [confidentialCorrId, `TOP-SECRET-${Date.now()}`, 'incoming', '2026-10-01', 'جهة سيادية سرية', 'تقرير سري للغاية حول التطوير الاستراتيجي', 'urgent', 'confidential', 'ملخص سري للغاية للمجلس', 'new', now, now, 'السكرتير التنفيذي']
     );
 
     // Seed confidential briefing note
@@ -128,7 +128,7 @@ describe('Phase 3: Server-Side Authorization & Confidentiality Enforcement', () 
       });
 
     expect(resAppr.status).toBe(403);
-    expect(resAppr.body.error).toContain('Chairman Only');
+    expect(resAppr.body.error).toContain('تأشيرة الاعتماد الرئاسية مقصورة حصرياً على السيد رئيس مجلس الإدارة');
   });
 
   it('allows CHAIRMAN with clearance to record approvals and view confidential briefing notes', async () => {

@@ -95,7 +95,7 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
       const originHost = new URL(origin).host;
       if (!validHosts.has(originHost)) {
         res.status(403).json({
-          error: 'طلب مرفوض: عدم تطابق مصدر الطلب (CSRF Origin Mismatch)'
+          error: 'طلب مرفوض: عدم تطابق مصدر الطلب'
         });
         return;
       }
@@ -108,7 +108,7 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
       const refererHost = new URL(referer).host;
       if (!validHosts.has(refererHost)) {
         res.status(403).json({
-          error: 'طلب مرفوض: عدم تطابق مرجع الطلب (CSRF Referer Mismatch)'
+          error: 'طلب مرفوض: عدم تطابق مرجع الطلب'
         });
         return;
       }
@@ -127,7 +127,7 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   if (!req.user || !req.userContext) {
     res.status(401).json({
-      error: 'يرجى تسجيل الدخول أولاً للوصول إلى هذا المورد (Authentication Required)'
+      error: 'يرجى تسجيل الدخول أولاً للوصول إلى هذا المورد'
     });
     return;
   }
@@ -148,7 +148,7 @@ export function mustChangePasswordGuard(req: Request, res: Response, next: NextF
 
     if (!allowedPaths.includes(req.path)) {
       res.status(403).json({
-        error: 'يجب تغيير كلمة المرور الأولية قبل متابعة استخدام النظام (Password Change Required)',
+        error: 'يجب تغيير كلمة المرور الأولية قبل متابعة استخدام النظام',
         code: 'MUST_CHANGE_PASSWORD'
       });
       return;
@@ -165,7 +165,7 @@ export function requireRole(allowedRoles: RoleType[]) {
     const role = req.user?.role;
     if (!role || !allowedRoles.includes(role)) {
       res.status(403).json({
-        error: 'غير مصرح لرتبتك الوظيفية بتنفيذ هذا الإجراء (Access Denied: Insufficient Role)',
+        error: 'غير مصرح لرتبتك الوظيفية بتنفيذ هذا الإجراء',
         code: 'FORBIDDEN'
       });
       return;
@@ -181,15 +181,15 @@ export function rbacGuard(resource: PermissionResource, action: PermissionAction
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.userContext) {
       res.status(401).json({
-        error: 'يرجى تسجيل الدخول أولاً للوصول إلى هذا المورد (Authentication Required)',
+        error: 'يرجى تسجيل الدخول أولاً للوصول إلى هذا المورد',
         code: 'UNAUTHORIZED'
       });
       return;
     }
     if (!can(req.userContext, action, resource)) {
-      let errorMsg = 'غير مصرح بتنفيذ هذا الإجراء لعدم كفاية الصلاحيات (Access Denied: Insufficient Permissions)';
+      let errorMsg = 'غير مصرح بتنفيذ هذا الإجراء لعدم كفاية الصلاحيات';
       if (action === 'approve') {
-        errorMsg = 'تأشيرة الاعتماد الرئاسية مقصورة حصرياً على السيد رئيس مجلس الإدارة (Chairman Only)';
+        errorMsg = 'تأشيرة الاعتماد الرئاسية مقصورة حصرياً على السيد رئيس مجلس الإدارة';
       }
       res.status(403).json({
         error: errorMsg,

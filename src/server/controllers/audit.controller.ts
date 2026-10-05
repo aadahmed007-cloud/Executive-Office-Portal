@@ -24,4 +24,13 @@ export class AuditController {
       next(err);
     }
   }
+
+  static async verify(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await (auditRepo as any).verify(req.userContext!);
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
 }

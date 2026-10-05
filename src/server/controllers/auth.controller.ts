@@ -13,16 +13,18 @@ import {
 const loginSchema = z.object({
   username: z.string().min(1, 'اسم المستخدم مطلوب'),
   password: z.string().min(1, 'كلمة المرور مطلوبة')
-});
+}).strict();
 
 const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1, 'كلمة المرور الحالية مطلوبة'),
-  newPassword: z.string().min(12, 'يجب ألا تقل كلمة المرور الجديدة عن 12 حرفاً')
-});
+  currentPassword: z.string().min(1).optional(),
+  newPassword: z.string().min(8).optional(),
+  current_password: z.string().min(1).optional(),
+  new_password: z.string().min(8).optional()
+}).strict();
 
 const reauthSchema = z.object({
   password: z.string().min(1, 'كلمة المرور مطلوبة')
-});
+}).strict();
 
 export class AuthController {
   /**
@@ -196,7 +198,14 @@ export class AuthController {
         return;
       }
 
-      const { currentPassword, newPassword } = parseResult.data;
+      const { current_password, currentPassword, new_password, newPassword } = parseResult.data as any;
+      const effectiveCurrentPassword = current_password || currentPassword;
+      const effectiveNewPassword = new_password || newPassword;
+
+      if (!effectiveCurrentPassword || !effectiveNewPassword) {
+        res.status(400).json({ error: 'كلمة المرور الحالية والجديدة مطلوبة' });
+        return;
+      }
 
       // Load full user with hash
       const userWithHash = await userRepo.getByUsername(req.user.username);
@@ -207,7 +216,7 @@ export class AuthController {
 
       // Verify current password
       const isCurrentValid = verifyPasswordServer(
-        currentPassword,
+        effectiveCurrentPassword,
         userWithHash.password_hash,
         userWithHash.password_salt
       );
@@ -218,14 +227,14 @@ export class AuthController {
       }
 
       // Enforce strength policy
-      const strengthCheck = AuthSecurityService.validatePasswordStrength(newPassword, req.user.username);
+      const strengthCheck = AuthSecurityService.validatePasswordStrength(effectiveNewPassword, req.user.username);
       if (!strengthCheck.isValid) {
         res.status(400).json({ error: strengthCheck.error });
         return;
       }
 
       // Compute new hash with fresh random salt
-      const newCredentials = hashPasswordServer(newPassword);
+      const newCredentials = hashPasswordServer(effectiveNewPassword);
 
       // Update in DB
       sqliteEngine.run(

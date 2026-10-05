@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { settingsRepo } from '../repositories/index.js';
+import { updateSettingsSchema } from '../validation/schemas.js';
 
 export class SettingsController {
   static async getSettings(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -13,7 +14,8 @@ export class SettingsController {
 
   static async updateSettings(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const updated = await settingsRepo.updateSettings(req.body, req.userContext!);
+      const validated = updateSettingsSchema.parse(req.body);
+      const updated = await settingsRepo.updateSettings(validated as any, req.userContext!);
       res.json(updated);
     } catch (err) {
       next(err);

@@ -1,8 +1,8 @@
 /**
- * Cryptographic utility using standard Web Crypto API (SubtleCrypto).
- * Works 100% offline, zero external dependencies, zero CDN.
+ * Cryptographic utility for Audit Log chaining and integrity verification.
+ * Supports standard Web Crypto API and pure isomorphic execution.
  */
-import { AuditLogEntry } from '../types';
+import { AuditLogEntry } from '../types/index.js';
 
 function bytesToHex(bytes: Uint8Array): string {
   let hex = '';
@@ -12,16 +12,8 @@ function bytesToHex(bytes: Uint8Array): string {
   return hex;
 }
 
-function hexToBuffer(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
-}
-
 /**
- * Computes SHA-256 hash in hexadecimal.
+ * Computes SHA-256 hash in hexadecimal using Web Crypto API.
  */
 export async function sha256Hex(content: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -32,8 +24,10 @@ export async function sha256Hex(content: string): Promise<string> {
 
 /**
  * Builds canonical string payload for audit hash calculation.
+ * Includes seq, user_id, and is_confidential for complete tamper-resistance.
  */
 export function buildAuditPayload(entry: {
+  seq?: number;
   id: string;
   timestamp: string;
   user_id: string;
@@ -43,10 +37,12 @@ export function buildAuditPayload(entry: {
   entity_id: string;
   before_value?: string | null;
   after_value?: string | null;
-  ip_address: string;
+  ip_address?: string | null;
   prev_hash?: string | null;
+  is_confidential?: number | boolean;
 }): string {
   return [
+    entry.seq !== undefined ? String(entry.seq) : '',
     entry.id,
     entry.timestamp,
     entry.user_id,
@@ -56,8 +52,9 @@ export function buildAuditPayload(entry: {
     entry.entity_id,
     entry.before_value || '',
     entry.after_value || '',
-    entry.ip_address,
-    entry.prev_hash || 'GENESIS'
+    entry.ip_address || '',
+    entry.prev_hash || 'GENESIS',
+    entry.is_confidential ? '1' : '0'
   ].join('||');
 }
 
@@ -65,6 +62,7 @@ export function buildAuditPayload(entry: {
  * Computes SHA-256 hash for an audit log entry chained to prev_hash.
  */
 export async function computeAuditEntryHash(entry: {
+  seq?: number;
   id: string;
   timestamp: string;
   user_id: string;
@@ -74,14 +72,21 @@ export async function computeAuditEntryHash(entry: {
   entity_id: string;
   before_value?: string | null;
   after_value?: string | null;
-  ip_address: string;
+  ip_address?: string | null;
   prev_hash?: string | null;
+  is_confidential?: number | boolean;
 }): Promise<string> {
   const payload = buildAuditPayload(entry);
   return sha256Hex(payload);
 }
 
 export const GENESIS_BLOCK_HASH = 'GENESIS-BLOCK-00000000000000000000000000000000';
+
+export interface AuditCheckpoint {
+  last_seq: number;
+  head_hash: string;
+  count: number;
+}
 
 export interface IntegrityVerificationResult {
   isValid: boolean;
@@ -93,23 +98,75 @@ export interface IntegrityVerificationResult {
 
 /**
  * Verifies the integrity of the audit log cryptographic chain.
- * Validates that the chain originates strictly from GENESIS_BLOCK_HASH,
- * that each entry is hashed correctly, and strictly linked to its predecessor.
+ * Validates:
+ * 1. First row prev_hash == GENESIS_BLOCK_HASH
+ * 2. null/empty entry_hash = broken
+ * 3. Strict sequential hash linking: entry[i].prev_hash === entry[i-1].entry_hash
+ * 4. Content tamper verification (computed hash == entry_hash)
+ * 5. Checkpoint verification (detects deleted oldest or newest rows)
  */
-export async function verifyAuditLogIntegrity(entries: AuditLogEntry[]): Promise<IntegrityVerificationResult> {
+export async function verifyAuditLogIntegrity(
+  entries: AuditLogEntry[],
+  checkpoint?: AuditCheckpoint | null
+): Promise<IntegrityVerificationResult> {
   if (entries.length === 0) {
+    if (checkpoint && checkpoint.count > 0) {
+      return {
+        isValid: false,
+        totalEntries: 0,
+        verifiedEntries: 0,
+        brokenReason: 'عدم تطابق مع نقطة التحقق: قاعدة البيانات لا تحتوي على سجلات تدقيق بالرغم من تسجيل نقطة تحقق'
+      };
+    }
     return { isValid: true, totalEntries: 0, verifiedEntries: 0 };
   }
 
-  // Sort chronologically ascending
-  const sorted = [...entries].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-  
+  // Sort by sequence if present, otherwise by timestamp
+  const sorted = [...entries].sort((a, b) => {
+    if (a.seq !== undefined && b.seq !== undefined) {
+      return a.seq - b.seq;
+    }
+    return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+  });
+
+  // Checkpoint validation: count check
+  if (checkpoint && checkpoint.count !== undefined && checkpoint.count !== sorted.length) {
+    return {
+      isValid: false,
+      totalEntries: sorted.length,
+      verifiedEntries: 0,
+      brokenReason: `عدم تطابق في إجمالي عدد سجلات التدقيق مع نقطة التحقق: المتوقع ${checkpoint.count}، الفعلي ${sorted.length} (تم اكتشاف حذف سجلات)`
+    };
+  }
+
+  // Checkpoint validation: oldest row deletion check
+  if (checkpoint && checkpoint.count > 0 && sorted[0].seq !== undefined && sorted[0].seq !== 1) {
+    return {
+      isValid: false,
+      totalEntries: sorted.length,
+      verifiedEntries: 0,
+      brokenEntryId: sorted[0].id,
+      brokenReason: `تم اكتشاف حذف أقدم السجلات: التسلسل يبدأ من ${sorted[0].seq} بدلاً من 1`
+    };
+  }
+
   let expectedPrevHash: string | null = GENESIS_BLOCK_HASH;
 
   for (let i = 0; i < sorted.length; i++) {
     const entry = sorted[i];
 
-    // Check prev_hash matches
+    // Rule: null or empty entry_hash is broken
+    if (!entry.entry_hash || entry.entry_hash.trim() === '') {
+      return {
+        isValid: false,
+        totalEntries: sorted.length,
+        verifiedEntries: i,
+        brokenEntryId: entry.id,
+        brokenReason: `توقيع السجل [${entry.id}] مفقود أو فارغ`
+      };
+    }
+
+    // Rule: First entry must link to genesis
     if (i === 0) {
       if (entry.prev_hash !== GENESIS_BLOCK_HASH) {
         return {
@@ -117,10 +174,11 @@ export async function verifyAuditLogIntegrity(entries: AuditLogEntry[]): Promise
           totalEntries: sorted.length,
           verifiedEntries: 0,
           brokenEntryId: entry.id,
-          brokenReason: `انقطاع في أصل السجل (Genesis Block Violation): السجل الأول [${entry.id}] لا يرتبط بالهاش الأولي المعتمد`
+          brokenReason: `انقطاع في أصل السجل: السجل الأول [${entry.id}] لا يرتبط بالهاش الأولي المعتمد`
         };
       }
     } else {
+      // Subsequent entries must strictly match predecessor
       if (entry.prev_hash !== expectedPrevHash) {
         return {
           isValid: false,
@@ -132,19 +190,40 @@ export async function verifyAuditLogIntegrity(entries: AuditLogEntry[]): Promise
       }
     }
 
-    // Recompute entry_hash and compare
+    // Content verification
     const computedHash = await computeAuditEntryHash(entry);
-    if (entry.entry_hash && entry.entry_hash !== computedHash) {
+    if (entry.entry_hash !== computedHash) {
       return {
         isValid: false,
         totalEntries: sorted.length,
         verifiedEntries: i,
         brokenEntryId: entry.id,
-        brokenReason: `تلاعب في بيانات السجل [${entry.id}]: التوقيع المحفوظ (${entry.entry_hash?.substring(0, 10)}...) لا يطابق المحتوى الفعلي المحسوب (${computedHash.substring(0, 10)}...)`
+        brokenReason: `تلاعب في بيانات السجل [${entry.id}]: التوقيع المحفوظ لا يطابق المحتوى الفعلي المحسوب`
       };
     }
 
-    expectedPrevHash = entry.entry_hash || computedHash;
+    expectedPrevHash = entry.entry_hash;
+  }
+
+  // Checkpoint validation: newest row deletion check
+  if (checkpoint && sorted.length > 0) {
+    const lastEntry = sorted[sorted.length - 1];
+    if (checkpoint.last_seq !== undefined && lastEntry.seq !== undefined && checkpoint.last_seq !== lastEntry.seq) {
+      return {
+        isValid: false,
+        totalEntries: sorted.length,
+        verifiedEntries: sorted.length - 1,
+        brokenReason: `عدم تطابق التسلسل النهائي مع نقطة التحقق: المتوقع ${checkpoint.last_seq}، الفعلي ${lastEntry.seq} (تم اكتشاف حذف أحدث السجلات)`
+      };
+    }
+    if (checkpoint.head_hash && checkpoint.head_hash !== lastEntry.entry_hash) {
+      return {
+        isValid: false,
+        totalEntries: sorted.length,
+        verifiedEntries: sorted.length - 1,
+        brokenReason: `عدم تطابق الهاش النهائي مع نقطة التحقق: المتوقع ${checkpoint.head_hash}، الفعلي ${lastEntry.entry_hash} (تم اكتشاف حذف أو تعديل أحدث السجلات)`
+      };
+    }
   }
 
   return {

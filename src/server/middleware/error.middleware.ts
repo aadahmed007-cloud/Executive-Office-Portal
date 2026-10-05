@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { ZodError } from 'zod';
 import { SecurityAuthorizationError } from '../../data/contracts/index.js';
 
 /**
@@ -16,7 +17,16 @@ export function errorHandler(
 
   if (err instanceof SecurityAuthorizationError) {
     res.status(403).json({
-      error: err.message || 'غير مصرح بتنفيذ هذا الإجراء (Access Denied)'
+      error: err.message || 'غير مصرح بتنفيذ هذا الإجراء'
+    });
+    return;
+  }
+
+  if (err instanceof ZodError || err.name === 'ZodError') {
+    res.status(400).json({
+      error: 'بيانات الطلب غير صالحة أو تحتوي على حقول غير مصرح بها',
+      code: 'VALIDATION_ERROR',
+      details: err.issues || err.errors
     });
     return;
   }
@@ -31,6 +41,7 @@ export function errorHandler(
 
   res.status(statusCode).json({
     error: safeMessage,
-    code: err.code || 'INTERNAL_ERROR'
+    code: err.code || (statusCode === 409 ? 'CONFLICT' : statusCode === 404 ? 'NOT_FOUND' : 'INTERNAL_ERROR')
   });
 }
+

@@ -11,8 +11,6 @@ export interface AuditContextInfo {
  * Secure Local Audit Logging Utility for closed on-premises / offline operations
  */
 export class AuditLogger {
-  private static defaultIp = '10.120.4.10 (المكتب الرئاسي)';
-
   /**
    * Core logging method with tamper-resistant cryptographic chaining
    */
@@ -25,71 +23,88 @@ export class AuditLogger {
       beforeValue?: string | null;
       afterValue?: string | null;
       ipAddress?: string;
+      isConfidential?: boolean | number;
     }
   ): Promise<AuditLogEntry> {
-    const id = `audit-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-    const timestamp = new Date().toISOString();
-    const ip = details.ipAddress || (user.role === 'CHAIRMAN' ? '10.120.4.10 (المكتب الرئاسي)' : '10.120.4.22 (السكرتارية التنفيذية)');
+    return sqliteEngine.runWithMutex(async () => {
+      const id = `audit-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+      const timestamp = new Date().toISOString();
+      const ip = details.ipAddress || '';
+      const isConf = details.isConfidential ? 1 : 0;
 
-    // Get previous entry hash from SQLite for cryptographic linkage
-    const latestRows = sqliteEngine.query<{ entry_hash: string }>('SELECT entry_hash FROM audit_log ORDER BY timestamp DESC, id DESC LIMIT 1');
-    const prevHash = latestRows[0]?.entry_hash || 'GENESIS-BLOCK-00000000000000000000000000000000';
+      // Get previous entry from SQLite for cryptographic linkage
+      const latestRows = sqliteEngine.query<{ seq: number; entry_hash: string }>(
+        'SELECT seq, entry_hash FROM audit_log ORDER BY seq DESC LIMIT 1'
+      );
+      const prevHash = latestRows[0]?.entry_hash || 'GENESIS-BLOCK-00000000000000000000000000000000';
+      const nextSeq = (latestRows[0]?.seq || 0) + 1;
 
-    const entryHash = await computeAuditEntryHash({
-      id,
-      timestamp,
-      user_id: user.id,
-      user_role: user.role,
-      action_type: actionType,
-      entity_type: entityType,
-      entity_id: entityId,
-      before_value: details.beforeValue || null,
-      after_value: details.afterValue || null,
-      ip_address: ip,
-      prev_hash: prevHash
+      const entryHash = await computeAuditEntryHash({
+        seq: nextSeq,
+        id,
+        timestamp,
+        user_id: user.id,
+        user_role: user.role,
+        action_type: actionType,
+        entity_type: entityType,
+        entity_id: entityId,
+        before_value: details.beforeValue || null,
+        after_value: details.afterValue || null,
+        ip_address: ip,
+        prev_hash: prevHash,
+        is_confidential: isConf
+      });
+
+      const entry: AuditLogEntry = {
+        seq: nextSeq,
+        id,
+        user_id: user.id,
+        user_name: user.name,
+        user_role: user.role,
+        action_type: actionType,
+        entity_type: entityType,
+        entity_id: entityId,
+        before_value: details.beforeValue || null,
+        after_value: details.afterValue || null,
+        timestamp,
+        ip_address: ip,
+        prev_hash: prevHash,
+        entry_hash: entryHash,
+        is_confidential: isConf
+      };
+
+      // Atomic insertion + Checkpoint update inside one transaction
+      sqliteEngine.transaction(() => {
+        sqliteEngine.run(
+          `INSERT INTO audit_log (seq, id, user_id, user_name, user_role, action_type, entity_type, entity_id, before_value, after_value, timestamp, ip_address, prev_hash, entry_hash, is_confidential)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            entry.seq,
+            entry.id,
+            entry.user_id,
+            entry.user_name,
+            entry.user_role,
+            entry.action_type,
+            entry.entity_type,
+            entry.entity_id,
+            entry.before_value,
+            entry.after_value,
+            entry.timestamp,
+            entry.ip_address,
+            entry.prev_hash,
+            entry.entry_hash,
+            entry.is_confidential
+          ]
+        );
+
+        sqliteEngine.run(
+          `UPDATE settings SET audit_last_seq = ?, audit_head_hash = ?, audit_count = audit_count + 1 WHERE id = 'settings-global' OR id = (SELECT id FROM settings LIMIT 1)`,
+          [entry.seq, entry.entry_hash]
+        );
+      });
+
+      return entry;
     });
-
-    const entry: AuditLogEntry = {
-      id,
-      user_id: user.id,
-      user_name: user.name,
-      user_role: user.role,
-      action_type: actionType,
-      entity_type: entityType,
-      entity_id: entityId,
-      before_value: details.beforeValue || null,
-      after_value: details.afterValue || null,
-      timestamp,
-      ip_address: ip,
-      prev_hash: prevHash,
-      entry_hash: entryHash
-    };
-
-    // Insert into SQLite
-    sqliteEngine.run(
-      `INSERT INTO audit_log (id, user_id, user_name, user_role, action_type, entity_type, entity_id, before_value, after_value, timestamp, ip_address, prev_hash, entry_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        entry.id,
-        entry.user_id,
-        entry.user_name,
-        entry.user_role,
-        entry.action_type,
-        entry.entity_type,
-        entry.entity_id,
-        entry.before_value,
-        entry.after_value,
-        entry.timestamp,
-        entry.ip_address,
-        entry.prev_hash,
-        entry.entry_hash
-      ]
-    );
-
-    // Save to IndexedDB
-    await sqliteEngine.saveImmediate();
-
-    return entry;
   }
 
   // --- Specific Directive Audit Methods ---

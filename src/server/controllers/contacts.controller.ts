@@ -1,5 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { contactRepo } from '../repositories/index.js';
+import {
+  createContactSchema,
+  updateContactSchema,
+  addInteractionSchema
+} from '../validation/schemas.js';
 
 export class ContactsController {
   static async getAll(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -26,7 +31,8 @@ export class ContactsController {
 
   static async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const created = await contactRepo.create(req.body, req.userContext!);
+      const validated = createContactSchema.parse(req.body);
+      const created = await contactRepo.create(validated as any, req.userContext!);
       res.status(201).json(created);
     } catch (err) {
       next(err);
@@ -35,7 +41,8 @@ export class ContactsController {
 
   static async update(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const updated = await contactRepo.update(req.params.id, req.body, req.userContext!);
+      const validated = updateContactSchema.parse(req.body);
+      const updated = await contactRepo.update(req.params.id, validated as any, req.userContext!);
       res.json(updated);
     } catch (err) {
       next(err);
@@ -62,7 +69,8 @@ export class ContactsController {
 
   static async addInteraction(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const created = await contactRepo.addInteraction(req.body, req.userContext!);
+      const validated = addInteractionSchema.parse(req.body);
+      const created = await contactRepo.addInteraction(validated as any, req.userContext!);
       res.status(201).json(created);
     } catch (err) {
       next(err);

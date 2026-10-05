@@ -42,7 +42,7 @@ export class BackendCommandService {
       entity_id: created.id,
       before_value: null,
       after_value: `جدولة اجتماع جديد: ${created.title} في ${created.location}`,
-      ip_address: '127.0.0.1 (Local Server)'
+      ip_address: '127.0.0.1'
     }, ctx);
     return created;
   }
@@ -60,7 +60,7 @@ export class BackendCommandService {
       entity_id: created.id,
       before_value: null,
       after_value: `تسجيل مكاتبة جديدة: [${created.serial_number}] ${created.subject}`,
-      ip_address: '127.0.0.1 (Local Server)'
+      ip_address: '127.0.0.1'
     }, ctx);
     return created;
   }
