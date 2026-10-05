@@ -6,9 +6,7 @@ import {
   directiveRepo,
   auditRepo,
   notificationRepo
-} from '../../data/sqlite/repositories';
-import { CommandService } from '../../domain/services/commandService';
-import { AuditLogger } from '../../domain/security/auditLogger';
+} from '../../data/api/apiRepositories';
 import {
   Meeting,
   MeetingAttendee,
@@ -29,12 +27,16 @@ import {
   Plus,
   Printer,
   ShieldCheck,
-  Send,
   Building,
-  UserCheck,
-  CheckSquare,
-  Sparkles,
+  User,
   ArrowRight,
+  Sparkles,
+  Check,
+  Layers,
+  FileCheck,
+  Send,
+  Trash2,
+  Lock,
   ShieldAlert
 } from 'lucide-react';
 
@@ -54,59 +56,58 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
   const { currentUser } = useAuth();
   const { t, formatNumber, formatDate } = useI18n();
 
-  const [activeTab, setActiveTab] = useState<'agenda' | 'attendees' | 'minutes' | 'decisions' | 'print'>('agenda');
-
+  const [activeTab, setActiveTab] = useState<'overview' | 'agenda' | 'attendees' | 'minutes' | 'decisions' | 'print'>('overview');
   const [attendees, setAttendees] = useState<MeetingAttendee[]>([]);
   const [agenda, setAgenda] = useState<AgendaItem[]>([]);
   const [minutes, setMinutes] = useState<MeetingMinutes | null>(null);
   const [decisions, setDecisions] = useState<Decision[]>([]);
-  const [currentStatus, setCurrentStatus] = useState(meeting.status);
+  const [currentStatus, setCurrentStatus] = useState<Meeting['status']>(meeting.status);
 
-  // Form states
+  // Forms State
   const [newAgendaTitle, setNewAgendaTitle] = useState('');
-  const [newAgendaDuration, setNewAgendaDuration] = useState(15);
+  const [newAgendaDuration, setNewAgendaDuration] = useState('15');
   const [newAgendaPresenter, setNewAgendaPresenter] = useState('');
 
   const [newAttendeeName, setNewAttendeeName] = useState('');
   const [newAttendeeTitle, setNewAttendeeTitle] = useState('');
-  const [newAttendeeEntity, setNewAttendeeEntity] = useState('الهيئة القومية للبريد');
+  const [newAttendeeEntity, setNewAttendeeEntity] = useState('');
   const [isAttendeeExternal, setIsAttendeeExternal] = useState(false);
 
   const [draftMinutesContent, setDraftMinutesContent] = useState('');
   const [approvedMinutesContent, setApprovedMinutesContent] = useState('');
 
   const [newDecisionContent, setNewDecisionContent] = useState('');
-  const [newDecisionDept, setNewDecisionDept] = useState('قطاع العمليات والخدمات البريدية');
-  const [newDecisionPerson, setNewDecisionPerson] = useState('رئيس قطاع العمليات');
-  const [newDecisionDueDate, setNewDecisionDueDate] = useState('2026-10-20');
+  const [newDecisionDept, setNewDecisionDept] = useState('قطاع الشؤون المالية والادارية');
+  const [newDecisionPerson, setNewDecisionPerson] = useState('');
+  const [newDecisionDueDate, setNewDecisionDueDate] = useState('');
+
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
-  const isChairman = currentUser.role === 'CHAIRMAN';
-  const isSecretary = currentUser.role === 'SECRETARY';
+  const getUserCtx = () => ({ can_view_confidential: Boolean(currentUser.can_view_confidential), role: currentUser.role, userId: currentUser.id });
 
   const loadDetails = async () => {
-    const userCtx = { can_view_confidential: currentUser.can_view_confidential, role: currentUser.role, userId: currentUser.id };
-    const [attList, agList, minData, decList] = await Promise.all([
+    const userCtx = getUserCtx();
+    const [attList, agendaList, minObj, decList] = await Promise.all([
       meetingRepo.getAttendees(meeting.id, userCtx),
       meetingRepo.getAgenda(meeting.id, userCtx),
       meetingRepo.getMinutes(meeting.id, userCtx),
       meetingRepo.getDecisions(meeting.id, userCtx)
     ]);
-
     setAttendees(attList);
-    setAgenda(agList);
-    setMinutes(minData);
-    setDecisions(decList);
-    if (minData) {
-      setDraftMinutesContent(minData.draft_content || '');
-      setApprovedMinutesContent(minData.approved_content || '');
+    setAgenda(agendaList);
+    setMinutes(minObj);
+    if (minObj) {
+      setDraftMinutesContent(minObj.draft_content || '');
+      setApprovedMinutesContent(minObj.approved_content || minObj.draft_content || '');
     }
+    setDecisions(decList);
   };
 
   useEffect(() => {
     if (isOpen) {
-      loadDetails();
       setCurrentStatus(meeting.status);
+      loadDetails();
+      setActionFeedback(null);
     }
   }, [isOpen, meeting.id]);
 
@@ -121,7 +122,7 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
           </div>
           <h3 className="text-lg font-bold text-slate-900">غير مصرح بالاطلاع</h3>
           <p className="text-xs text-slate-600">
-            هذا الاجتماع مصنف بدرجة سرية تتطلب تصريحاً أمنياً معتمداً من مكتب رئيس مجلس الإدارة.
+            هذا الاجتماع محاط بتصنيف سري لا يمكن عرضه دون تفويض أمني معتمد.
           </p>
           <button
             onClick={onClose}
@@ -136,7 +137,8 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
 
   // --- Handlers ---
   const handleTransitionStatus = async (newStatus: Meeting['status'], label: string) => {
-    await CommandService.updateMeeting(meeting.id, { status: newStatus }, currentUser);
+    const ctx = getUserCtx();
+    await meetingRepo.update(meeting.id, { status: newStatus }, ctx);
     setCurrentStatus(newStatus);
     setActionFeedback(`تم تغيير حالة الاجتماع إلى: ${label}`);
     onMeetingUpdated();
@@ -157,7 +159,8 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
       }
     ];
 
-    await CommandService.setAgenda(meeting.id, updated, currentUser);
+    const ctx = getUserCtx();
+    await meetingRepo.setAgenda(meeting.id, updated, ctx);
     setNewAgendaTitle('');
     setNewAgendaPresenter('');
     setActionFeedback('تمت إضافة بند جديد لجدول الأعمال بنجاح.');
@@ -179,7 +182,8 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
       }
     ];
 
-    await CommandService.setAttendees(meeting.id, updated, currentUser);
+    const ctx = getUserCtx();
+    await meetingRepo.setAttendees(meeting.id, updated, ctx);
     setNewAttendeeName('');
     setNewAttendeeTitle('');
     setActionFeedback('تم قيد المشارك في قائمة الحضور الرسمية بنجاح.');
@@ -187,19 +191,20 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
   };
 
   const handleSaveDraftMinutes = async () => {
-    await CommandService.saveMinutes({
+    const ctx = getUserCtx();
+    await meetingRepo.saveMinutes({
       meeting_id: meeting.id,
       draft_content: draftMinutesContent,
       status: 'draft'
-    }, currentUser);
+    }, ctx);
 
-    await CommandService.createNotification({
+    await notificationRepo.create({
       recipient_role: 'CHAIRMAN',
       title: `مسودة محضر اجتماع جاهزة للاعتماد`,
       body: `تم تدوين مسودة محضر الاجتماع «${meeting.title}» ومتاحة الآن للمراجعة والاعتماد.`,
       confidentiality: meeting.confidentiality,
       is_read: false
-    }, currentUser);
+    }, ctx);
 
     await loadDetails();
     setActionFeedback('تم حفظ مسودة محضر الاجتماع وإرسال إشعار للسيد رئيس مجلس الإدارة.');
@@ -207,16 +212,17 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
 
   const handleApproveMinutes = async () => {
     const approvalText = approvedMinutesContent || draftMinutesContent;
-    await CommandService.saveMinutes({
+    const ctx = getUserCtx();
+    await meetingRepo.saveMinutes({
       meeting_id: meeting.id,
       draft_content: draftMinutesContent,
       approved_content: approvalText,
       status: 'approved',
       approved_by: currentUser.name,
       approved_at: new Date().toISOString()
-    }, currentUser);
+    }, ctx);
 
-    await CommandService.updateMeeting(meeting.id, { status: 'minutes_approved' }, currentUser);
+    await meetingRepo.update(meeting.id, { status: 'minutes_approved' }, ctx);
     setCurrentStatus('minutes_approved');
 
     await loadDetails();
@@ -229,7 +235,8 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
     if (!newDecisionContent) return;
 
     const nextOrder = decisions.length + 1;
-    await CommandService.addDecision({
+    const ctx = getUserCtx();
+    await meetingRepo.addDecision({
       meeting_id: meeting.id,
       order_index: nextOrder,
       content: newDecisionContent,
@@ -237,7 +244,7 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
       assigned_to_name: newDecisionPerson,
       due_date: newDecisionDueDate,
       status: 'in_progress'
-    }, currentUser);
+    }, ctx);
 
     setNewDecisionContent('');
     setActionFeedback('تم قيد القرار التنفيذي بنجاح.');
@@ -246,12 +253,13 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
 
   const handleConvertToDirective = async (decision: Decision) => {
     const nextCode = await directiveRepo.getNextCode();
-    const createdDirective = await CommandService.createDirective({
+    const ctx = getUserCtx();
+    const createdDirective = await directiveRepo.create({
       code: nextCode,
       title: `تكليف تنفيذي ناتج عن اجتماع: ${meeting.title}`,
       instruction: decision.content,
       assigned_department: decision.assigned_department_id || 'قطاع العمليات والخدمات البريدية',
-      assigned_person: decision.assigned_to_name,
+      assigned_person: decision.assigned_to_name || 'رئيس القطاع',
       source_type: 'meeting',
       source_id: meeting.id,
       priority: 'urgent',
@@ -259,546 +267,454 @@ export const MeetingDetailModal: React.FC<MeetingDetailModalProps> = ({
       status: 'assigned',
       progress_percent: 0,
       issued_at: new Date().toISOString(),
-      due_date: decision.due_date,
+      due_date: decision.due_date || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
       matter_id: meeting.matter_id || null,
       created_by: currentUser.name
-    }, currentUser);
+    }, ctx);
 
-    await loadDetails();
-    setActionFeedback(`تم تحويل القرار بنجاح إلى التكليف الرئاسي الرسمي رقم ${createdDirective.code}.`);
+    setActionFeedback(`تم تحويل القرار بنجاح إلى تكليف رئاسي رسمي برمز: ${createdDirective.code}`);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-3 sm:p-5 overflow-y-auto">
-      <div className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden text-right flex flex-col max-h-[90vh]">
-        {/* Modal Header */}
-        <div className="bg-emerald-950 text-white p-5 flex items-start justify-between border-b border-emerald-900">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-800 text-emerald-200 border border-emerald-700">
-                {meeting.meeting_type === 'board'
-                  ? 'جلسة مجلس إدارة'
-                  : meeting.meeting_type === 'external_entity'
-                  ? 'جهة خارجية'
-                  : meeting.meeting_type === 'ministerial'
-                  ? 'لقاء وزاري'
-                  : 'اجتماع داخلي'}
-              </span>
-              <span className="px-2.5 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-amber-300">
-                {currentStatus === 'confirmed'
-                  ? 'مؤكد وجاهز'
-                  : currentStatus === 'in_session'
-                  ? 'منعقد حالياً'
-                  : currentStatus === 'minutes_approved'
-                  ? 'المحضر معتمد رسمياً'
-                  : currentStatus === 'minutes_drafted'
-                  ? 'المحضر مسودة'
-                  : 'مجدول مبدئياً'}
-              </span>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 overflow-y-auto" dir="rtl">
+      <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+        {/* Header */}
+        <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-950 border border-emerald-600/40 flex items-center justify-center text-emerald-400 font-bold">
+              <Calendar className="w-6 h-6" />
             </div>
-            <h2 className="text-lg sm:text-xl font-bold text-slate-100">{meeting.title}</h2>
-            <div className="flex flex-wrap items-center gap-4 text-xs text-emerald-300/80 pt-1">
-              <span className="flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                <span>{formatDate(meeting.start_time, { showTime: true })}</span>
-              </span>
-              <span className="flex items-center gap-1">
-                <MapPin className="w-3.5 h-3.5 text-emerald-400" />
-                <span>{meeting.location}</span>
-              </span>
+            <div>
+              <h3 className="text-base font-bold text-white">{meeting.title}</h3>
+              <p className="text-xs text-emerald-400 font-medium">جلسة مجلس الإدارة والاجتماعات التنسيقية العليا</p>
             </div>
           </div>
-
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-emerald-900 transition cursor-pointer"
+            className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Action Feedback Toast */}
-        {actionFeedback && (
-          <div className="bg-emerald-50 border-b border-emerald-200 px-5 py-2.5 flex items-center justify-between text-xs text-emerald-800">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-              <span className="font-semibold">{actionFeedback}</span>
-            </div>
-            <button
-              onClick={() => setActionFeedback(null)}
-              className="text-emerald-600 hover:text-emerald-900 text-sm font-bold cursor-pointer"
-            >
-              ×
-            </button>
-          </div>
-        )}
-
-        {/* Workflow Lifecycle Transition Bar */}
-        <div className="bg-slate-50 px-5 py-2.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
-          <div className="font-semibold text-slate-700">دورة سير الاجتماع:</div>
-          <div className="flex items-center gap-1.5">
-            {currentStatus === 'scheduled' && (
-              <button
-                onClick={() => handleTransitionStatus('confirmed', 'مؤكد')}
-                className="px-3 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold transition cursor-pointer"
-              >
-                {t('meetings.transition_confirm')}
-              </button>
-            )}
-            {currentStatus === 'confirmed' && (
-              <button
-                onClick={() => handleTransitionStatus('in_session', 'منعقد')}
-                className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold transition cursor-pointer flex items-center gap-1"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>{t('meetings.transition_start')}</span>
-              </button>
-            )}
-            {currentStatus === 'in_session' && (
-              <button
-                onClick={() => handleTransitionStatus('minutes_drafted', 'المحضر مسودة')}
-                className="px-3 py-1 rounded-lg bg-blue-700 hover:bg-blue-600 text-white font-bold transition cursor-pointer"
-              >
-                {t('meetings.transition_finish')}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Tabs Bar */}
-        <div className="flex border-b border-slate-200 bg-white px-5 gap-2 overflow-x-auto text-xs font-semibold">
+        {/* Tabs */}
+        <div className="flex items-center gap-1 px-6 pt-3 border-b border-slate-200 bg-slate-50 overflow-x-auto">
           {[
-            { id: 'agenda', label: t('meetings.agenda_tab'), count: agenda.length },
-            { id: 'attendees', label: t('meetings.attendees_tab'), count: attendees.length },
-            { id: 'minutes', label: t('meetings.minutes_tab') },
-            { id: 'decisions', label: t('meetings.decisions_tab'), count: decisions.length },
-            { id: 'print', label: t('meetings.print_agenda') }
+            { id: 'overview', label: 'تفاصيل الجلسة' },
+            { id: 'agenda', label: `جدول الأعمال (${agenda.length})` },
+            { id: 'attendees', label: `قائمة الحضور (${attendees.length})` },
+            { id: 'minutes', label: 'محضر الجلسة' },
+            { id: 'decisions', label: `القرارات التنفيذية (${decisions.length})` },
+            { id: 'print', label: 'معاينة الطباعة والتوثيق' }
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`py-3 px-4 border-b-2 transition whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+              className={`px-4 py-2 text-xs font-bold transition border-b-2 cursor-pointer whitespace-nowrap ${
                 activeTab === tab.id
-                  ? 'border-emerald-700 text-emerald-800 font-bold'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
+                  ? 'border-emerald-600 text-emerald-800 bg-white rounded-t-xl'
+                  : 'border-transparent text-slate-600 hover:text-slate-900'
               }`}
             >
-              <span>{tab.label}</span>
-              {tab.count !== undefined && (
-                <span className="px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-600 text-[10px]">
-                  {formatNumber(tab.count)}
-                </span>
-              )}
+              {tab.label}
             </button>
           ))}
         </div>
 
-        {/* Content Area */}
-        <div className="p-5 flex-1 overflow-y-auto space-y-6">
-          {/* TAB 1: AGENDA */}
-          {activeTab === 'agenda' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-slate-900">بنود جدول الأعمال المقررة</h3>
-                <span className="text-xs text-slate-500">
-                  إجمالي المدة المقدرة: {formatNumber(agenda.reduce((acc, cur) => acc + cur.duration_minutes, 0))} دقيقة
-                </span>
-              </div>
+        {/* Body */}
+        <div className="p-6 overflow-y-auto flex-1 space-y-6 text-xs">
+          {actionFeedback && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 font-medium flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+              <span>{actionFeedback}</span>
+            </div>
+          )}
 
-              <div className="space-y-2.5">
-                {agenda.map((item) => (
-                  <div
-                    key={item.id || item.order_index}
-                    className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 flex items-start justify-between gap-4"
-                  >
-                    <div className="flex items-start gap-3">
-                      <span className="w-6 h-6 rounded-lg bg-emerald-800 text-white font-bold text-xs flex items-center justify-center flex-shrink-0">
-                        {formatNumber(item.order_index)}
-                      </span>
-                      <div>
-                        <h4 className="text-xs font-bold text-slate-900">{item.title}</h4>
-                        {item.description && <p className="text-[11px] text-slate-500 mt-0.5">{item.description}</p>}
-                        <div className="text-[11px] text-emerald-700 font-medium mt-1">
-                          المتحدث / المسؤول: {item.presenter}
-                        </div>
-                      </div>
-                    </div>
+          {activeTab === 'overview' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-1">
+                  <span className="text-slate-600 font-medium">موعد الانعقاد:</span>
+                  <div className="text-sm font-bold text-slate-900 flex items-center gap-2 pt-1">
+                    <Clock className="w-4 h-4 text-emerald-700" />
+                    <span>{formatDate(meeting.start_time, { showTime: true })}</span>
+                  </div>
+                </div>
 
-                    <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-900 whitespace-nowrap">
-                      {formatNumber(item.duration_minutes)} دقيقة
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-1">
+                  <span className="text-slate-600 font-medium">المكان / قاعة الاجتماعات:</span>
+                  <div className="text-sm font-bold text-slate-900 flex items-center gap-2 pt-1">
+                    <MapPin className="w-4 h-4 text-emerald-700" />
+                    <span>{meeting.location}</span>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-1">
+                  <span className="text-slate-600 font-medium">حالة الجلسة الحالية:</span>
+                  <div className="pt-1">
+                    <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      {currentStatus}
                     </span>
                   </div>
-                ))}
+                </div>
               </div>
 
-              {/* Add Agenda Item Form (Secretary) */}
-              {isSecretary && (
-                <form onSubmit={handleAddAgendaItem} className="p-4 rounded-xl bg-slate-100/70 border border-slate-200 space-y-3">
-                  <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                    <Plus className="w-4 h-4 text-emerald-700" />
-                    <span>{t('meetings.add_agenda_item')}</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                    <div className="sm:col-span-6">
-                      <input
-                        type="text"
-                        required
-                        placeholder="عنوان البند والموضوع المراد مناقشته..."
-                        value={newAgendaTitle}
-                        onChange={(e) => setNewAgendaTitle(e.target.value)}
-                        className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
-                      />
-                    </div>
-                    <div className="sm:col-span-3">
-                      <input
-                        type="text"
-                        placeholder="اسم المتحدث / المسؤول..."
-                        value={newAgendaPresenter}
-                        onChange={(e) => setNewAgendaPresenter(e.target.value)}
-                        className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <input
-                        type="number"
-                        min="5"
-                        step="5"
-                        placeholder="المدة (د)"
-                        value={newAgendaDuration}
-                        onChange={(e) => setNewAgendaDuration(Number(e.target.value))}
-                        className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-800 text-center"
-                      />
-                    </div>
-                    <div className="sm:col-span-1">
-                      <button
-                        type="submit"
-                        className="w-full h-full py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition cursor-pointer"
-                      >
-                        إضافة
-                      </button>
-                    </div>
-                  </div>
-                </form>
-              )}
-            </div>
-          )}
-
-          {/* TAB 2: ATTENDEES */}
-          {activeTab === 'attendees' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-slate-900">المشاركون والضيوف</h3>
-                <span className="text-xs text-slate-500">إجمالي المدعوين: {formatNumber(attendees.length)}</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {attendees.map((att) => (
-                  <div
-                    key={att.id || att.name}
-                    className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 flex items-center justify-between gap-3"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-xs flex items-center justify-center">
-                        {att.name.charAt(0)}
-                      </div>
-                      <div>
-                        <div className="text-xs font-bold text-slate-900">{att.name}</div>
-                        <div className="text-[11px] text-slate-500">{att.title} — {att.entity}</div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      {att.is_external ? (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
-                          جهة خارجية
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
-                          البريد المصري
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Add Attendee Form */}
-              {isSecretary && (
-                <form onSubmit={handleAddAttendee} className="p-4 rounded-xl bg-slate-100/70 border border-slate-200 space-y-3">
-                  <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                    <Plus className="w-4 h-4 text-emerald-700" />
-                    <span>{t('meetings.add_attendee')}</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                    <div className="sm:col-span-4">
-                      <input
-                        type="text"
-                        required
-                        placeholder="الاسم الثلاثي..."
-                        value={newAttendeeName}
-                        onChange={(e) => setNewAttendeeName(e.target.value)}
-                        className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
-                      />
-                    </div>
-                    <div className="sm:col-span-3">
-                      <input
-                        type="text"
-                        placeholder="الصفة / المنصب..."
-                        value={newAttendeeTitle}
-                        onChange={(e) => setNewAttendeeTitle(e.target.value)}
-                        className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
-                      />
-                    </div>
-                    <div className="sm:col-span-3">
-                      <input
-                        type="text"
-                        placeholder="الجهة..."
-                        value={newAttendeeEntity}
-                        onChange={(e) => setNewAttendeeEntity(e.target.value)}
-                        className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <button
-                        type="submit"
-                        className="w-full h-full py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition cursor-pointer"
-                      >
-                        إضافة
-                      </button>
-                    </div>
-                  </div>
-                </form>
-              )}
-            </div>
-          )}
-
-          {/* TAB 3: MINUTES & SIGNOFF */}
-          {activeTab === 'minutes' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-slate-900">محضر الجلسة الرسمي والاعتماد</h3>
-                {minutes?.status === 'approved' ? (
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>معتمد رسمياً من رئيس مجلس الإدارة</span>
-                  </span>
-                ) : (
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                    مسودة قيد المراجعة
-                  </span>
-                )}
-              </div>
-
-              {/* Secretary Draft Studio */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  نص مسودة المحضر (تدوين السكرتارية):
-                </label>
-                <textarea
-                  value={draftMinutesContent}
-                  onChange={(e) => setDraftMinutesContent(e.target.value)}
-                  disabled={!isSecretary && minutes?.status === 'approved'}
-                  placeholder={t('meetings.draft_minutes_placeholder')}
-                  rows={5}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs leading-relaxed text-slate-800 focus:outline-none focus:border-emerald-600"
-                />
-                {isSecretary && (
-                  <div className="flex justify-end pt-2">
-                    <button
-                      onClick={handleSaveDraftMinutes}
-                      className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition cursor-pointer"
-                    >
-                      {t('meetings.save_draft_minutes')}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Chairman Signoff & Approval */}
-              {isChairman && (
-                <div className="mt-4 p-5 rounded-2xl bg-amber-50/70 border border-amber-300 space-y-3">
-                  <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
-                    <ShieldCheck className="w-4 h-4 text-amber-700" />
-                    <span>اعتماد رئيس مجلس الإدارة:</span>
-                  </div>
-                  <p className="text-xs text-amber-800">
-                    بالنقر على زر الاعتماد أدناه، يتم توثيق المحضر رسمياً بصفة نهائية وتسجيله في سجل الرقابة الحكومي.
+              {meeting.notes && (
+                <div className="p-4 bg-emerald-950/5 border border-emerald-900/10 rounded-2xl space-y-2">
+                  <span className="font-bold text-emerald-900">ملاحظات واشتراطات الجلسة:</span>
+                  <p className="text-slate-800 leading-relaxed font-medium bg-white p-3 rounded-xl border border-emerald-900/10">
+                    {meeting.notes}
                   </p>
+                </div>
+              )}
+
+              {/* Status Switcher Actions */}
+              <div className="p-5 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-sm">
+                <h4 className="font-bold text-slate-900">إدارة دورة حياة الاجتماع</h4>
+                <div className="flex flex-wrap items-center gap-2">
                   <button
-                    onClick={handleApproveMinutes}
-                    className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-700 to-teal-800 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-xs shadow-lg transition flex items-center justify-center gap-2 cursor-pointer"
+                    onClick={() => handleTransitionStatus('scheduled', 'مجدولة')}
+                    className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold transition cursor-pointer"
                   >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>{t('meetings.approve_minutes_btn')}</span>
+                    جدولة الجلسة
+                  </button>
+                  <button
+                    onClick={() => handleTransitionStatus('in_session', 'قيد الانعقاد حالياً')}
+                    className="px-3.5 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold transition cursor-pointer"
+                  >
+                    بدء الانعقاد (In Session)
+                  </button>
+                  <button
+                    onClick={() => handleTransitionStatus('minutes_drafted', 'رفعت الجلسة')}
+                    className="px-3.5 py-2 rounded-xl bg-blue-100 hover:bg-blue-200 text-blue-900 font-bold transition cursor-pointer"
+                  >
+                    رفع الجلسة (Adjourned)
+                  </button>
+                  <button
+                    onClick={() => handleTransitionStatus('minutes_approved', 'معتمدة المحضر')}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold transition cursor-pointer"
+                  >
+                    اعتماد المحضر نهائياً
                   </button>
                 </div>
-              )}
+              </div>
             </div>
           )}
 
-          {/* TAB 4: DECISIONS & DIRECTIVES */}
-          {activeTab === 'decisions' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-slate-900">القرارات الصادرة ومتابعة تحويلها لتكليفات</h3>
-                <span className="text-xs text-slate-500">إجمالي القرارات: {formatNumber(decisions.length)}</span>
-              </div>
-
+          {activeTab === 'agenda' && (
+            <div className="space-y-6">
               <div className="space-y-3">
-                {decisions.map((dec) => (
-                  <div
-                    key={dec.id || dec.order_index}
-                    className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-2.5">
-                        <span className="w-6 h-6 rounded bg-purple-100 text-purple-900 font-bold text-xs flex items-center justify-center flex-shrink-0">
-                          {formatNumber(dec.order_index)}
-                        </span>
-                        <div className="text-xs font-bold text-slate-900">{dec.content}</div>
-                      </div>
-
-                      {/* Convert to Directive Button */}
-                      <button
-                        onClick={() => handleConvertToDirective(dec)}
-                        className="px-3 py-1.5 rounded-lg bg-emerald-800 hover:bg-emerald-700 text-white text-[11px] font-bold transition flex items-center gap-1 whitespace-nowrap cursor-pointer"
-                      >
-                        <CheckSquare className="w-3.5 h-3.5" />
-                        <span>{t('meetings.convert_to_directive')}</span>
-                      </button>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-4 text-[11px] text-slate-600 pt-1 border-t border-slate-200">
-                      <span>المسؤول: <strong className="text-slate-800">{dec.assigned_to_name}</strong></span>
-                      <span>تاريخ الاستحقاق: <strong className="text-slate-800">{formatDate(dec.due_date)}</strong></span>
-                    </div>
+                <h4 className="font-bold text-slate-900">بنود جدول الأعمال والموضوعات المعروضة</h4>
+                {agenda.length === 0 ? (
+                  <div className="p-6 text-center bg-slate-50 rounded-2xl text-slate-600 border border-slate-200">
+                    لم تتم إضافة بنود لجدول الأعمال بعد.
                   </div>
-                ))}
+                ) : (
+                  <div className="space-y-2">
+                    {agenda.map((item, idx) => (
+                      <div key={idx} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <span className="w-7 h-7 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold font-mono">
+                            {formatNumber(item.order_index)}
+                          </span>
+                          <div>
+                            <h5 className="font-bold text-slate-900">{item.title}</h5>
+                            <span className="text-[11px] text-slate-600">المقرر / العارض: {item.presenter}</span>
+                          </div>
+                        </div>
+                        <span className="px-2.5 py-1 rounded-lg bg-slate-200 text-slate-700 font-mono text-[11px]">
+                          {formatNumber(item.duration_minutes)} دقيقة
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {/* Add Decision Form */}
-              <form onSubmit={handleAddDecision} className="p-4 rounded-xl bg-slate-100/70 border border-slate-200 space-y-3">
-                <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <Plus className="w-4 h-4 text-purple-700" />
-                  <span>{t('meetings.add_decision')}</span>
-                </div>
+              {/* Add Agenda Form */}
+              <form onSubmit={handleAddAgendaItem} className="p-5 bg-white border border-slate-200 rounded-2xl space-y-4 shadow-sm">
+                <h4 className="font-bold text-slate-900">إضافة بند جديد لجدول الأعمال</h4>
                 <div>
-                  <textarea
-                    required
-                    placeholder="نص القرار التنفيذي الصادر عن الاجتماع..."
-                    value={newDecisionContent}
-                    onChange={(e) => setNewDecisionContent(e.target.value)}
-                    rows={2}
-                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
-                  />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <label className="block text-slate-600 font-medium mb-1">عنوان البند أو الموضوع:</label>
                   <input
                     type="text"
                     required
-                    placeholder="المسؤول عن التنفيذ..."
-                    value={newDecisionPerson}
-                    onChange={(e) => setNewDecisionPerson(e.target.value)}
-                    className="bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
+                    value={newAgendaTitle}
+                    onChange={(e) => setNewAgendaTitle(e.target.value)}
+                    placeholder="مثال: مناقشة الموازنة الاستثمارية للقطاع..."
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 focus:outline-none focus:border-emerald-600"
                   />
-                  <input
-                    type="date"
-                    required
-                    value={newDecisionDueDate}
-                    onChange={(e) => setNewDecisionDueDate(e.target.value)}
-                    className="bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
-                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-slate-600 font-medium mb-1">المدة المقدرة (بالدقائق):</label>
+                    <input
+                      type="number"
+                      value={newAgendaDuration}
+                      onChange={(e) => setNewAgendaDuration(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-mono focus:outline-none focus:border-emerald-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-600 font-medium mb-1">اسم العارض / المقرر:</label>
+                    <input
+                      type="text"
+                      value={newAgendaPresenter}
+                      onChange={(e) => setNewAgendaPresenter(e.target.value)}
+                      placeholder={currentUser.name}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 focus:outline-none focus:border-emerald-600"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end pt-2">
                   <button
                     type="submit"
-                    className="py-2 bg-purple-800 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition cursor-pointer"
+                    className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white font-bold rounded-xl transition shadow-sm cursor-pointer"
                   >
-                    حفظ القرار
+                    إضافة البند للقائمة
                   </button>
                 </div>
               </form>
             </div>
           )}
 
-          {/* TAB 5: PRINT-READY AGENDA */}
-          {activeTab === 'print' && (
-            <div className="space-y-4">
-              <div className="flex justify-end">
-                <button
-                  onClick={() => window.print()}
-                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer shadow"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>طباعة ملف الجلسة الرسمي (PDF)</span>
-                </button>
+          {activeTab === 'attendees' && (
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <h4 className="font-bold text-slate-900">قائمة الحضور الرسمية وأعضاء المجلس</h4>
+                {attendees.length === 0 ? (
+                  <div className="p-6 text-center bg-slate-50 rounded-2xl text-slate-600 border border-slate-200">
+                    لا توجد قائمة حضور مسجلة.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {attendees.map((att, idx) => (
+                      <div key={idx} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <h5 className="font-bold text-slate-900">{att.name}</h5>
+                          <p className="text-[11px] text-slate-600">{att.title} — {att.entity}</p>
+                        </div>
+                        <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                          {att.attendance_status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {/* Printable Official Agenda Docket */}
-              <div className="bg-white border-2 border-slate-800 p-8 rounded-2xl text-slate-900 space-y-6 print:border-none print:p-0">
-                <div className="border-b-2 border-slate-900 pb-4 flex items-start justify-between">
+              {/* Add Attendee Form */}
+              <form onSubmit={handleAddAttendee} className="p-5 bg-white border border-slate-200 rounded-2xl space-y-4 shadow-sm">
+                <h4 className="font-bold text-slate-900">قيد مشارك / ضيف جديد</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <h3 className="font-extrabold text-base">الهيئة القومية للبريد المصري</h3>
-                    <h4 className="text-xs font-bold text-slate-700">مكتب رئيس مجلس الإدارة</h4>
-                    <div className="text-[11px] text-slate-500 mt-1">بطاقة جدول أعمال الاجتماع الرسمي</div>
+                    <label className="block text-slate-600 font-medium mb-1">اسم المشارك:</label>
+                    <input
+                      type="text"
+                      required
+                      value={newAttendeeName}
+                      onChange={(e) => setNewAttendeeName(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 focus:outline-none focus:border-emerald-600"
+                    />
                   </div>
-                  <div className="text-left text-xs font-mono">
-                    <div>التاريخ: {formatDate(meeting.start_time)}</div>
-                    <div>المكان: {meeting.location}</div>
+                  <div>
+                    <label className="block text-slate-600 font-medium mb-1">الصفة / المسمى:</label>
+                    <input
+                      type="text"
+                      value={newAttendeeTitle}
+                      onChange={(e) => setNewAttendeeTitle(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 focus:outline-none focus:border-emerald-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-600 font-medium mb-1">الجهة / القطاع:</label>
+                    <input
+                      type="text"
+                      value={newAttendeeEntity}
+                      onChange={(e) => setNewAttendeeEntity(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 focus:outline-none focus:border-emerald-600"
+                    />
                   </div>
                 </div>
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white font-bold rounded-xl transition shadow-sm cursor-pointer"
+                  >
+                    تسجيل الحضور
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
 
-                <div>
-                  <h4 className="font-bold text-sm text-slate-900 mb-1">موضوع الاجتماع: {meeting.title}</h4>
-                  <div className="text-xs text-slate-600">
-                    التوقيت: {formatDate(meeting.start_time, { showTime: true })} حتى {meeting.end_time.split('T')[1]}
+          {activeTab === 'minutes' && (
+            <div className="space-y-6">
+              <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-4">
+                <h4 className="font-bold text-slate-900">مسودة محضر الجلسة (تدوين السكرتارية التنفيذية)</h4>
+                <textarea
+                  rows={6}
+                  value={draftMinutesContent}
+                  onChange={(e) => setDraftMinutesContent(e.target.value)}
+                  placeholder="اكتب مسودة ما دار في الاجتماع ومجريات النقاش..."
+                  className="w-full bg-white border border-slate-300 rounded-xl p-3 focus:outline-none focus:border-emerald-600 leading-relaxed"
+                />
+                <div className="flex items-center justify-end gap-3">
+                  <button
+                    onClick={handleSaveDraftMinutes}
+                    className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition shadow-sm cursor-pointer"
+                  >
+                    حفظ مسودة المحضر وإرسالها للرئيس
+                  </button>
+                </div>
+              </div>
+
+              {currentUser.role === 'CHAIRMAN' && (
+                <div className="p-5 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-4">
+                  <h4 className="font-bold text-emerald-950">اعتماد المحضر الرسمي وتوقيع رئيس مجلس الإدارة</h4>
+                  <textarea
+                    rows={6}
+                    value={approvedMinutesContent}
+                    onChange={(e) => setApprovedMinutesContent(e.target.value)}
+                    placeholder="مراجعة المحضر وإقرار اعتماده..."
+                    className="w-full bg-white border border-emerald-300 rounded-xl p-3 focus:outline-none focus:border-emerald-600 leading-relaxed"
+                  />
+                  <div className="flex items-center justify-end gap-3">
+                    <button
+                      onClick={handleApproveMinutes}
+                      className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white font-bold rounded-xl transition shadow-sm cursor-pointer"
+                    >
+                      اعتماد وتوقيع المحضر رسمياً
+                    </button>
                   </div>
                 </div>
+              )}
+            </div>
+          )}
 
-                <div>
-                  <h5 className="font-bold text-xs text-slate-800 mb-2 border-b pb-1">جدول الأعمال:</h5>
-                  <div className="space-y-2 text-xs">
-                    {agenda.map((ag) => (
-                      <div key={ag.id} className="flex justify-between border-b border-slate-100 pb-1">
-                        <span>{formatNumber(ag.order_index)}. {ag.title}</span>
-                        <span className="font-mono text-slate-500">{formatNumber(ag.duration_minutes)} دقيقة</span>
+          {activeTab === 'decisions' && (
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <h4 className="font-bold text-slate-900">القرارات التنفيذية الصادرة عن الجلسة</h4>
+                {decisions.length === 0 ? (
+                  <div className="p-6 text-center bg-slate-50 rounded-2xl text-slate-600 border border-slate-200">
+                    لا توجد قرارات مسجلة لهذا الاجتماع بعد.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {decisions.map((dec) => (
+                      <div key={dec.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="space-y-1">
+                            <span className="text-[11px] font-mono font-bold text-emerald-800">قرار رقم ({formatNumber(dec.order_index)})</span>
+                            <p className="text-slate-900 font-bold leading-relaxed">{dec.content}</p>
+                            <p className="text-xs text-slate-600">المكلف بالتنفيذ: {dec.assigned_department_id} ({dec.assigned_to_name})</p>
+                          </div>
+                          <button
+                            onClick={() => handleConvertToDirective(dec)}
+                            className="px-3.5 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer flex-shrink-0"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>تحويل لتكليف رئاسي</span>
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
-                </div>
+                )}
+              </div>
 
+              {/* Add Decision Form */}
+              <form onSubmit={handleAddDecision} className="p-5 bg-white border border-slate-200 rounded-2xl space-y-4 shadow-sm">
+                <h4 className="font-bold text-slate-900">إصدار وقيد قرار تنفيذي جديد</h4>
                 <div>
-                  <h5 className="font-bold text-xs text-slate-800 mb-2 border-b pb-1">قائمة المشاركين:</h5>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    {attendees.map((att) => (
-                      <div key={att.id} className="text-slate-700">
-                        • {att.name} ({att.title} - {att.entity})
-                      </div>
-                    ))}
+                  <label className="block text-slate-600 font-medium mb-1">نص القرار:</label>
+                  <textarea
+                    required
+                    rows={2}
+                    value={newDecisionContent}
+                    onChange={(e) => setNewDecisionContent(e.target.value)}
+                    placeholder="اكتب منطوق القرار..."
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 focus:outline-none focus:border-emerald-600"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-slate-600 font-medium mb-1">القطاع المكلف:</label>
+                    <input
+                      type="text"
+                      value={newDecisionDept}
+                      onChange={(e) => setNewDecisionDept(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 focus:outline-none focus:border-emerald-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-600 font-medium mb-1">المسؤول:</label>
+                    <input
+                      type="text"
+                      value={newDecisionPerson}
+                      onChange={(e) => setNewDecisionPerson(e.target.value)}
+                      placeholder="رئيس القطاع"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 focus:outline-none focus:border-emerald-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-600 font-medium mb-1">تاريخ الاستحقاق:</label>
+                    <input
+                      type="date"
+                      value={newDecisionDueDate}
+                      onChange={(e) => setNewDecisionDueDate(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-mono focus:outline-none focus:border-emerald-600"
+                    />
                   </div>
                 </div>
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white font-bold rounded-xl transition shadow-sm cursor-pointer"
+                  >
+                    قيد القرار بالسجل
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
 
-                <div className="pt-8 flex justify-between text-xs text-center border-t border-slate-300">
-                  <div>
-                    <div className="text-slate-500 mb-8">أمين السر / سكرتير أول</div>
-                    <div className="font-bold">السكرتير التنفيذي الأول</div>
-                  </div>
-                  <div>
-                    <div className="text-slate-500 mb-8">رئيس مجلس الإدارة</div>
-                    <div className="font-bold">رئيس مجلس الإدارة</div>
-                  </div>
+          {activeTab === 'print' && (
+            <div className="p-8 bg-white border border-slate-300 rounded-2xl space-y-6 text-slate-900 shadow-inner">
+              <div className="text-center space-y-1 border-b border-slate-200 pb-4">
+                <h3 className="font-bold text-sm">جمهورية مصر العربية — الهيئة القومية للبريد</h3>
+                <h4 className="font-bold text-xs text-emerald-800">مكتب مساعد رئيس مجلس الإدارة</h4>
+                <div className="text-[11px] font-mono text-slate-600 pt-1">محضر اجتماع رسمي معتمد: {meeting.title}</div>
+              </div>
+              <div className="space-y-3 text-xs">
+                <div><strong>الموعد:</strong> {formatDate(meeting.start_time, { showTime: true })}</div>
+                <div><strong>المكان:</strong> {meeting.location}</div>
+                <div><strong>عدد الحضور:</strong> {attendees.length} مشاركاً</div>
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                  <strong>خلاصة المحضر:</strong>
+                  <p className="leading-relaxed">{approvedMinutesContent || draftMinutesContent || 'لم يتم اعتماد محضر بعد.'}</p>
                 </div>
+              </div>
+              <div className="flex justify-end pt-4">
+                <button
+                  onClick={() => window.print()}
+                  className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>طباعة المحضر</span>
+                </button>
               </div>
             </div>
           )}
         </div>
 
-        {/* Modal Footer */}
-        <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-between items-center text-xs">
-          <span className="text-slate-500">
-            معرف السجل: <strong className="font-mono">{meeting.id}</strong>
-          </span>
+        {/* Footer */}
+        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs">
+          <span className="text-slate-500 font-mono">معرف الجلسة: {meeting.id}</span>
           <button
             onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold cursor-pointer"
+            className="px-5 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold transition cursor-pointer"
           >
             إغلاق
           </button>

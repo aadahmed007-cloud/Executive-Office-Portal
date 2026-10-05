@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { auditRepo } from '../../data/sqlite/repositories';
+import { auditRepo } from '../../data/api/apiRepositories';
 import { useI18n } from '../../i18n/i18nContext';
+import { useAuth } from '../../features/auth/AuthContext';
 import { AuditLogEntry } from '../../domain/types';
 import {
   Activity,
@@ -26,13 +27,16 @@ export const RecentActivityWidget: React.FC<RecentActivityWidgetProps> = ({
   maxItems = 5
 }) => {
   const { t, formatDate } = useI18n();
+  const { currentUser } = useAuth();
   const [activities, setActivities] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(false);
 
   const fetchActivities = async () => {
+    if (!currentUser) return;
     setLoading(true);
+    const userCtx = { can_view_confidential: Boolean(currentUser.can_view_confidential), role: currentUser.role, userId: currentUser.id };
     try {
-      const list = await auditRepo.getAll({ limit: maxItems });
+      const list = await auditRepo.getAll({ limit: maxItems }, userCtx);
       setActivities(list);
     } finally {
       setLoading(false);

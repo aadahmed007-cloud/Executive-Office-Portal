@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../features/auth/AuthContext';
 import { useI18n } from '../../i18n/i18nContext';
-import { notificationRepo } from '../../data/sqlite/repositories';
+import { notificationRepo } from '../../data/api/apiRepositories';
 import {
   Bell,
   Settings,

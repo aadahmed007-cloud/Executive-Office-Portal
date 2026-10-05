@@ -9,8 +9,13 @@ import {
   IUserRepository,
   ISettingsRepository,
   UserContext,
-  SecurityAuthorizationError
-} from '../contracts';
+  SecurityAuthorizationError,
+  MeetingFilter,
+  CorrespondenceFilter,
+  DirectiveFilter,
+  MatterFilter,
+  AuditFilter
+} from '../contracts/index.js';
 import {
   Meeting,
   MeetingAttendee,
@@ -33,172 +38,196 @@ import {
   SystemSettings,
   User,
   RoleType
-} from '../../domain/types';
+} from '../../domain/types/index.js';
 
 /**
- * Helper to execute standard JSON requests against local backend API
+ * Universal Client API fetcher wrapper.
  */
 async function apiRequest<T>(
   path: string,
   options: {
     method?: string;
     body?: any;
-    userContext?: UserContext;
   } = {}
 ): Promise<T> {
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest'
   };
 
-  if (options.userContext?.userId) {
-    headers['X-User-Id'] = options.userContext.userId;
-  }
-  if (options.userContext?.role) {
-    headers['X-User-Role'] = options.userContext.role;
-  }
-  if (options.userContext?.can_view_confidential !== undefined) {
-    headers['X-Can-View-Confidential'] = String(options.userContext.can_view_confidential);
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method: options.method || 'GET',
+      headers,
+      credentials: 'same-origin',
+      body: options.body ? JSON.stringify(options.body) : undefined
+    });
+  } catch {
+    throw new Error('فشل الاتصال بالخادم: تعذر الوصول إلى الشبكة أو انقطع الاتصال (Network Error)');
   }
 
-  const response = await fetch(path, {
-    method: options.method || 'GET',
-    headers,
-    body: options.body ? JSON.stringify(options.body) : undefined
-  });
+  const parsed = await parseApiResponse<T>(response);
 
-  if (!response.ok) {
-    let errorMsg = `API Request failed with status ${response.status}`;
-    try {
-      const errData = await response.json();
-      if (errData.error) errorMsg = errData.error;
-    } catch {
-      // ignore
+  if (!parsed.ok) {
+    if (parsed.status === 401 || parsed.status === 403) {
+      throw new SecurityAuthorizationError(`${parsed.error} [${parsed.technicalDetails}]`);
     }
-    if (response.status === 401 || response.status === 403) {
-      throw new SecurityAuthorizationError(errorMsg);
-    }
-    throw new Error(errorMsg);
+    throw new Error(`${parsed.error} [${parsed.technicalDetails}]`);
   }
 
-  return response.json();
+  return parsed.data as T;
+}
+
+async function parseApiResponse<T>(response: Response): Promise<{ ok: boolean; status: number; data?: T; error?: string; technicalDetails?: string }> {
+  const status = response.status;
+  const contentType = response.headers.get('content-type') || '';
+
+  if (!contentType.includes('application/json')) {
+    const htmlText = await response.text();
+    return {
+      ok: false,
+      status,
+      error: 'استجابة غير صالحة من الخادم (Invalid server response format)',
+      technicalDetails: htmlText.substring(0, 100)
+    };
+  }
+
+  try {
+    const body = await response.json();
+    if (response.ok) {
+      return { ok: true, status, data: body as T };
+    } else {
+      return {
+        ok: false,
+        status,
+        error: body.error || 'حدث خطأ غير معروف في المعالجة',
+        technicalDetails: `HTTP ${status}`
+      };
+    }
+  } catch {
+    return {
+      ok: false,
+      status,
+      error: 'فشل تحليل الاستجابة بصيغة JSON',
+      technicalDetails: `HTTP ${status}`
+    };
+  }
 }
 
 // --- API Meeting Repository ---
 export class ApiMeetingRepository implements IMeetingRepository {
-  async getAll(filter?: { status?: string; matterId?: string; date?: string; search?: string }, userContext?: UserContext): Promise<Meeting[]> {
-    const query = new URLSearchParams(filter as any).toString();
-    return apiRequest<Meeting[]>(`/api/meetings${query ? `?${query}` : ''}`, { userContext });
+  async getAll(filter: MeetingFilter | undefined, ctx: UserContext): Promise<Meeting[]> {
+    const query = new URLSearchParams((filter || {}) as any).toString();
+    return apiRequest<Meeting[]>(`/api/meetings${query ? `?${query}` : ''}`);
   }
 
-  async getById(id: string, userContext?: UserContext): Promise<Meeting | null> {
-    return apiRequest<Meeting | null>(`/api/meetings/${id}`, { userContext });
+  async getById(id: string, ctx: UserContext): Promise<Meeting | null> {
+    return apiRequest<Meeting | null>(`/api/meetings/${id}`);
   }
 
-  async create(meeting: Omit<Meeting, 'id' | 'created_at' | 'updated_at'>, userContext?: UserContext): Promise<Meeting> {
-    return apiRequest<Meeting>('/api/meetings', { method: 'POST', body: meeting, userContext });
+  async create(meeting: Omit<Meeting, 'id' | 'created_at' | 'updated_at'>, ctx: UserContext): Promise<Meeting> {
+    return apiRequest<Meeting>('/api/meetings', { method: 'POST', body: meeting });
   }
 
-  async update(id: string, meeting: Partial<Meeting>, userContext?: UserContext): Promise<Meeting> {
-    return apiRequest<Meeting>(`/api/meetings/${id}`, { method: 'PATCH', body: meeting, userContext });
+  async update(id: string, meeting: Partial<Meeting>, ctx: UserContext): Promise<Meeting> {
+    return apiRequest<Meeting>(`/api/meetings/${id}`, { method: 'PATCH', body: meeting });
   }
 
-  async softDelete(id: string, userContext?: UserContext): Promise<boolean> {
-    return apiRequest<boolean>(`/api/meetings/${id}`, { method: 'DELETE', userContext });
+  async softDelete(id: string, ctx: UserContext): Promise<boolean> {
+    return apiRequest<boolean>(`/api/meetings/${id}`, { method: 'DELETE' });
   }
 
-  async getAttendees(meetingId: string, userContext?: UserContext): Promise<MeetingAttendee[]> {
-    return apiRequest<MeetingAttendee[]>(`/api/meetings/${meetingId}/attendees`, { userContext });
+  async getAttendees(meetingId: string, ctx: UserContext): Promise<MeetingAttendee[]> {
+    return apiRequest<MeetingAttendee[]>(`/api/meetings/${meetingId}/attendees`);
   }
 
-  async setAttendees(meetingId: string, attendees: Omit<MeetingAttendee, 'id' | 'meeting_id'>[], userContext?: UserContext): Promise<void> {
-    return apiRequest<void>(`/api/meetings/${meetingId}/attendees`, { method: 'PUT', body: attendees, userContext });
+  async setAttendees(meetingId: string, attendees: Omit<MeetingAttendee, 'id' | 'meeting_id'>[], ctx: UserContext): Promise<void> {
+    return apiRequest<void>(`/api/meetings/${meetingId}/attendees`, { method: 'PUT', body: attendees });
   }
 
-  async getAgenda(meetingId: string, userContext?: UserContext): Promise<AgendaItem[]> {
-    return apiRequest<AgendaItem[]>(`/api/meetings/${meetingId}/agenda`, { userContext });
+  async getAgenda(meetingId: string, ctx: UserContext): Promise<AgendaItem[]> {
+    return apiRequest<AgendaItem[]>(`/api/meetings/${meetingId}/agenda`);
   }
 
-  async setAgenda(meetingId: string, items: Omit<AgendaItem, 'id' | 'meeting_id'>[], userContext?: UserContext): Promise<void> {
-    return apiRequest<void>(`/api/meetings/${meetingId}/agenda`, { method: 'PUT', body: items, userContext });
+  async setAgenda(meetingId: string, items: Omit<AgendaItem, 'id' | 'meeting_id'>[], ctx: UserContext): Promise<void> {
+    return apiRequest<void>(`/api/meetings/${meetingId}/agenda`, { method: 'PUT', body: items });
   }
 
-  async getMinutes(meetingId: string, userContext?: UserContext): Promise<MeetingMinutes | null> {
-    return apiRequest<MeetingMinutes | null>(`/api/meetings/${meetingId}/minutes`, { userContext });
+  async getMinutes(meetingId: string, ctx: UserContext): Promise<MeetingMinutes | null> {
+    return apiRequest<MeetingMinutes | null>(`/api/meetings/${meetingId}/minutes`);
   }
 
-  async saveMinutes(minutes: Omit<MeetingMinutes, 'id'>, userContext?: UserContext): Promise<MeetingMinutes> {
-    return apiRequest<MeetingMinutes>(`/api/meetings/${minutes.meeting_id}/minutes`, { method: 'POST', body: minutes, userContext });
+  async saveMinutes(minutes: Omit<MeetingMinutes, 'id'>, ctx: UserContext): Promise<MeetingMinutes> {
+    return apiRequest<MeetingMinutes>(`/api/meetings/${minutes.meeting_id}/minutes`, { method: 'POST', body: minutes });
   }
 
-  async getDecisions(meetingId: string, userContext?: UserContext): Promise<Decision[]> {
-    return apiRequest<Decision[]>(`/api/meetings/${meetingId}/decisions`, { userContext });
+  async getDecisions(meetingId: string, ctx: UserContext): Promise<Decision[]> {
+    return apiRequest<Decision[]>(`/api/meetings/${meetingId}/decisions`);
   }
 
-  async addDecision(decision: Omit<Decision, 'id'>, userContext?: UserContext): Promise<Decision> {
-    return apiRequest<Decision>(`/api/meetings/${decision.meeting_id}/decisions`, { method: 'POST', body: decision, userContext });
+  async addDecision(decision: Omit<Decision, 'id'>, ctx: UserContext): Promise<Decision> {
+    return apiRequest<Decision>(`/api/meetings/${decision.meeting_id}/decisions`, { method: 'POST', body: decision });
   }
 }
 
 // --- API Correspondence Repository ---
 export class ApiCorrespondenceRepository implements ICorrespondenceRepository {
-  async getAll(
-    filter?: { type?: 'incoming' | 'outgoing'; status?: string; matterId?: string; priority?: string; category?: string; tag?: string; search?: string },
-    userContext?: UserContext
-  ): Promise<Correspondence[]> {
-    const query = new URLSearchParams(filter as any).toString();
-    return apiRequest<Correspondence[]>(`/api/correspondence${query ? `?${query}` : ''}`, { userContext });
+  async getAll(filter: CorrespondenceFilter | undefined, ctx: UserContext): Promise<Correspondence[]> {
+    const query = new URLSearchParams((filter || {}) as any).toString();
+    return apiRequest<Correspondence[]>(`/api/correspondence${query ? `?${query}` : ''}`);
   }
 
-  async getById(id: string, userContext?: UserContext): Promise<Correspondence | null> {
-    return apiRequest<Correspondence | null>(`/api/correspondence/${id}`, { userContext });
+  async getById(id: string, ctx: UserContext): Promise<Correspondence | null> {
+    return apiRequest<Correspondence | null>(`/api/correspondence/${id}`);
   }
 
-  async getBySerial(serial: string, userContext?: UserContext): Promise<Correspondence | null> {
-    return apiRequest<Correspondence | null>(`/api/correspondence/serial/${encodeURIComponent(serial)}`, { userContext });
+  async getBySerial(serial: string, ctx: UserContext): Promise<Correspondence | null> {
+    return apiRequest<Correspondence | null>(`/api/correspondence/serial/${encodeURIComponent(serial)}`);
   }
 
-  async create(item: Omit<Correspondence, 'id' | 'created_at' | 'updated_at'>, userContext?: UserContext): Promise<Correspondence> {
-    return apiRequest<Correspondence>('/api/correspondence', { method: 'POST', body: item, userContext });
+  async create(item: Omit<Correspondence, 'id' | 'created_at' | 'updated_at'>, ctx: UserContext): Promise<Correspondence> {
+    return apiRequest<Correspondence>('/api/correspondence', { method: 'POST', body: item });
   }
 
-  async update(id: string, item: Partial<Correspondence>, userContext?: UserContext): Promise<Correspondence> {
-    return apiRequest<Correspondence>(`/api/correspondence/${id}`, { method: 'PATCH', body: item, userContext });
+  async update(id: string, item: Partial<Correspondence>, ctx: UserContext): Promise<Correspondence> {
+    return apiRequest<Correspondence>(`/api/correspondence/${id}`, { method: 'PATCH', body: item });
   }
 
-  async softDelete(id: string, userContext?: UserContext): Promise<boolean> {
-    return apiRequest<boolean>(`/api/correspondence/${id}`, { method: 'DELETE', userContext });
+  async softDelete(id: string, ctx: UserContext): Promise<boolean> {
+    return apiRequest<boolean>(`/api/correspondence/${id}`, { method: 'DELETE' });
   }
 
-  async getBriefingNote(correspondenceId: string, userContext?: UserContext): Promise<BriefingNote | null> {
-    return apiRequest<BriefingNote | null>(`/api/correspondence/${correspondenceId}/briefing`, { userContext });
+  async getBriefingNote(correspondenceId: string, ctx: UserContext): Promise<BriefingNote | null> {
+    return apiRequest<BriefingNote | null>(`/api/correspondence/${correspondenceId}/briefing`);
   }
 
-  async saveBriefingNote(note: Omit<BriefingNote, 'id'>, userContext?: UserContext): Promise<BriefingNote> {
-    return apiRequest<BriefingNote>(`/api/correspondence/${note.correspondence_id}/briefing`, { method: 'POST', body: note, userContext });
+  async saveBriefingNote(note: Omit<BriefingNote, 'id'>, ctx: UserContext): Promise<BriefingNote> {
+    return apiRequest<BriefingNote>(`/api/correspondence/${note.correspondence_id}/briefing`, { method: 'POST', body: note });
   }
 
-  async getApproval(correspondenceId: string, userContext?: UserContext): Promise<Approval | null> {
-    return apiRequest<Approval | null>(`/api/correspondence/${correspondenceId}/approval`, { userContext });
+  async getApproval(correspondenceId: string, ctx: UserContext): Promise<Approval | null> {
+    return apiRequest<Approval | null>(`/api/correspondence/${correspondenceId}/approval`);
   }
 
-  async recordApproval(approval: Omit<Approval, 'id'>, userContext?: UserContext): Promise<Approval> {
-    return apiRequest<Approval>(`/api/correspondence/${approval.correspondence_id}/approval`, { method: 'POST', body: approval, userContext });
+  async recordApproval(approval: Omit<Approval, 'id'>, ctx: UserContext): Promise<Approval> {
+    return apiRequest<Approval>(`/api/correspondence/${approval.correspondence_id}/approval`, { method: 'POST', body: approval });
   }
 
-  async getRoutings(correspondenceId: string, userContext?: UserContext): Promise<CorrespondenceRouting[]> {
-    return apiRequest<CorrespondenceRouting[]>(`/api/correspondence/${correspondenceId}/routings`, { userContext });
+  async getRoutings(correspondenceId: string, ctx: UserContext): Promise<CorrespondenceRouting[]> {
+    return apiRequest<CorrespondenceRouting[]>(`/api/correspondence/${correspondenceId}/routings`);
   }
 
-  async addRouting(routing: Omit<CorrespondenceRouting, 'id'>, userContext?: UserContext): Promise<CorrespondenceRouting> {
-    return apiRequest<CorrespondenceRouting>(`/api/correspondence/${routing.correspondence_id}/routings`, { method: 'POST', body: routing, userContext });
+  async addRouting(routing: Omit<CorrespondenceRouting, 'id'>, ctx: UserContext): Promise<CorrespondenceRouting> {
+    return apiRequest<CorrespondenceRouting>(`/api/correspondence/${routing.correspondence_id}/routings`, { method: 'POST', body: routing });
   }
 
-  async getAttachments(correspondenceId: string, userContext?: UserContext): Promise<Attachment[]> {
-    return apiRequest<Attachment[]>(`/api/correspondence/${correspondenceId}/attachments`, { userContext });
+  async getAttachments(correspondenceId: string, ctx: UserContext): Promise<Attachment[]> {
+    return apiRequest<Attachment[]>(`/api/correspondence/${correspondenceId}/attachments`);
   }
 
-  async addAttachment(att: Omit<Attachment, 'id'>, userContext?: UserContext): Promise<Attachment> {
-    return apiRequest<Attachment>(`/api/correspondence/${att.entity_id}/attachments`, { method: 'POST', body: att, userContext });
+  async addAttachment(att: Omit<Attachment, 'id'>, ctx: UserContext): Promise<Attachment> {
+    return apiRequest<Attachment>(`/api/correspondence/${att.entity_id}/attachments`, { method: 'POST', body: att });
   }
 
   async getNextSerial(type: 'incoming' | 'outgoing', year?: number): Promise<string> {
@@ -209,33 +238,33 @@ export class ApiCorrespondenceRepository implements ICorrespondenceRepository {
 
 // --- API Directive Repository ---
 export class ApiDirectiveRepository implements IDirectiveRepository {
-  async getAll(filter?: { status?: string; assignedDepartment?: string; matterId?: string; search?: string }, userContext?: UserContext): Promise<Directive[]> {
-    const query = new URLSearchParams(filter as any).toString();
-    return apiRequest<Directive[]>(`/api/directives${query ? `?${query}` : ''}`, { userContext });
+  async getAll(filter: DirectiveFilter | undefined, ctx: UserContext): Promise<Directive[]> {
+    const query = new URLSearchParams((filter || {}) as any).toString();
+    return apiRequest<Directive[]>(`/api/directives${query ? `?${query}` : ''}`);
   }
 
-  async getById(id: string, userContext?: UserContext): Promise<Directive | null> {
-    return apiRequest<Directive | null>(`/api/directives/${id}`, { userContext });
+  async getById(id: string, ctx: UserContext): Promise<Directive | null> {
+    return apiRequest<Directive | null>(`/api/directives/${id}`);
   }
 
-  async create(directive: Omit<Directive, 'id' | 'created_at' | 'updated_at'>, userContext?: UserContext): Promise<Directive> {
-    return apiRequest<Directive>('/api/directives', { method: 'POST', body: directive, userContext });
+  async create(directive: Omit<Directive, 'id' | 'created_at' | 'updated_at'>, ctx: UserContext): Promise<Directive> {
+    return apiRequest<Directive>('/api/directives', { method: 'POST', body: directive });
   }
 
-  async update(id: string, directive: Partial<Directive>, userContext?: UserContext): Promise<Directive> {
-    return apiRequest<Directive>(`/api/directives/${id}`, { method: 'PATCH', body: directive, userContext });
+  async update(id: string, directive: Partial<Directive>, ctx: UserContext): Promise<Directive> {
+    return apiRequest<Directive>(`/api/directives/${id}`, { method: 'PATCH', body: directive });
   }
 
-  async softDelete(id: string, userContext?: UserContext): Promise<boolean> {
-    return apiRequest<boolean>(`/api/directives/${id}`, { method: 'DELETE', userContext });
+  async softDelete(id: string, ctx: UserContext): Promise<boolean> {
+    return apiRequest<boolean>(`/api/directives/${id}`, { method: 'DELETE' });
   }
 
-  async getUpdates(directiveId: string, userContext?: UserContext): Promise<DirectiveUpdate[]> {
-    return apiRequest<DirectiveUpdate[]>(`/api/directives/${directiveId}/updates`, { userContext });
+  async getUpdates(directiveId: string, ctx: UserContext): Promise<DirectiveUpdate[]> {
+    return apiRequest<DirectiveUpdate[]>(`/api/directives/${directiveId}/updates`);
   }
 
-  async addUpdate(update: Omit<DirectiveUpdate, 'id' | 'created_at'>, userContext?: UserContext): Promise<DirectiveUpdate> {
-    return apiRequest<DirectiveUpdate>(`/api/directives/${update.directive_id}/updates`, { method: 'POST', body: update, userContext });
+  async addUpdate(update: Omit<DirectiveUpdate, 'id' | 'created_at'>, ctx: UserContext): Promise<DirectiveUpdate> {
+    return apiRequest<DirectiveUpdate>(`/api/directives/${update.directive_id}/updates`, { method: 'POST', body: update });
   }
 
   async getNextCode(year?: number): Promise<string> {
@@ -246,109 +275,109 @@ export class ApiDirectiveRepository implements IDirectiveRepository {
 
 // --- API Matter Repository ---
 export class ApiMatterRepository implements IMatterRepository {
-  async getAll(filter?: { status?: string; search?: string }, userContext?: UserContext): Promise<Matter[]> {
-    const query = new URLSearchParams(filter as any).toString();
-    return apiRequest<Matter[]>(`/api/matters${query ? `?${query}` : ''}`, { userContext });
+  async getAll(filter: MatterFilter | undefined, ctx: UserContext): Promise<Matter[]> {
+    const query = new URLSearchParams((filter || {}) as any).toString();
+    return apiRequest<Matter[]>(`/api/matters${query ? `?${query}` : ''}`);
   }
 
-  async getById(id: string, userContext?: UserContext): Promise<Matter | null> {
-    return apiRequest<Matter | null>(`/api/matters/${id}`, { userContext });
+  async getById(id: string, ctx: UserContext): Promise<Matter | null> {
+    return apiRequest<Matter | null>(`/api/matters/${id}`);
   }
 
-  async create(matter: Omit<Matter, 'id' | 'created_at' | 'updated_at'>, userContext?: UserContext): Promise<Matter> {
-    return apiRequest<Matter>('/api/matters', { method: 'POST', body: matter, userContext });
+  async create(matter: Omit<Matter, 'id' | 'created_at' | 'updated_at'>, ctx: UserContext): Promise<Matter> {
+    return apiRequest<Matter>('/api/matters', { method: 'POST', body: matter });
   }
 
-  async update(id: string, matter: Partial<Matter>, userContext?: UserContext): Promise<Matter> {
-    return apiRequest<Matter>(`/api/matters/${id}`, { method: 'PATCH', body: matter, userContext });
+  async update(id: string, matter: Partial<Matter>, ctx: UserContext): Promise<Matter> {
+    return apiRequest<Matter>(`/api/matters/${id}`, { method: 'PATCH', body: matter });
   }
 
-  async softDelete(id: string, userContext?: UserContext): Promise<boolean> {
-    return apiRequest<boolean>(`/api/matters/${id}`, { method: 'DELETE', userContext });
+  async softDelete(id: string, ctx: UserContext): Promise<boolean> {
+    return apiRequest<boolean>(`/api/matters/${id}`, { method: 'DELETE' });
   }
 
-  async getLinks(matterId: string, userContext?: UserContext): Promise<MatterLink[]> {
-    return apiRequest<MatterLink[]>(`/api/matters/${matterId}/links`, { userContext });
+  async getLinks(matterId: string, ctx: UserContext): Promise<MatterLink[]> {
+    return apiRequest<MatterLink[]>(`/api/matters/${matterId}/links`);
   }
 
-  async addLink(link: Omit<MatterLink, 'id' | 'created_at'>, userContext?: UserContext): Promise<MatterLink> {
-    return apiRequest<MatterLink>(`/api/matters/${link.matter_id}/links`, { method: 'POST', body: link, userContext });
+  async addLink(link: Omit<MatterLink, 'id' | 'created_at'>, ctx: UserContext): Promise<MatterLink> {
+    return apiRequest<MatterLink>(`/api/matters/${link.matter_id}/links`, { method: 'POST', body: link });
   }
 
-  async removeLink(linkId: string, userContext?: UserContext): Promise<boolean> {
-    return apiRequest<boolean>(`/api/matters/links/${linkId}`, { method: 'DELETE', userContext });
+  async removeLink(linkId: string, ctx: UserContext): Promise<boolean> {
+    return apiRequest<boolean>(`/api/matters/links/${linkId}`, { method: 'DELETE' });
   }
 }
 
 // --- API Contact Repository ---
 export class ApiContactRepository implements IContactRepository {
-  async getAll(): Promise<Contact[]> {
+  async getAll(ctx: UserContext): Promise<Contact[]> {
     return apiRequest<Contact[]>('/api/contacts');
   }
 
-  async getById(id: string): Promise<Contact | null> {
+  async getById(id: string, ctx: UserContext): Promise<Contact | null> {
     return apiRequest<Contact | null>(`/api/contacts/${id}`);
   }
 
-  async create(contact: Omit<Contact, 'id' | 'created_at'>, userContext?: UserContext): Promise<Contact> {
-    return apiRequest<Contact>('/api/contacts', { method: 'POST', body: contact, userContext });
+  async create(contact: Omit<Contact, 'id' | 'created_at'>, ctx: UserContext): Promise<Contact> {
+    return apiRequest<Contact>('/api/contacts', { method: 'POST', body: contact });
   }
 
-  async update(id: string, contact: Partial<Contact>, userContext?: UserContext): Promise<Contact> {
-    return apiRequest<Contact>(`/api/contacts/${id}`, { method: 'PATCH', body: contact, userContext });
+  async update(id: string, contact: Partial<Contact>, ctx: UserContext): Promise<Contact> {
+    return apiRequest<Contact>(`/api/contacts/${id}`, { method: 'PATCH', body: contact });
   }
 
-  async softDelete(id: string, userContext?: UserContext): Promise<boolean> {
-    return apiRequest<boolean>(`/api/contacts/${id}`, { method: 'DELETE', userContext });
+  async softDelete(id: string, ctx: UserContext): Promise<boolean> {
+    return apiRequest<boolean>(`/api/contacts/${id}`, { method: 'DELETE' });
   }
 
-  async getInteractions(contactId: string): Promise<Interaction[]> {
+  async getInteractions(contactId: string, ctx: UserContext): Promise<Interaction[]> {
     return apiRequest<Interaction[]>(`/api/contacts/${contactId}/interactions`);
   }
 
-  async addInteraction(interaction: Omit<Interaction, 'id'>, userContext?: UserContext): Promise<Interaction> {
-    return apiRequest<Interaction>(`/api/contacts/${interaction.contact_id}/interactions`, { method: 'POST', body: interaction, userContext });
+  async addInteraction(interaction: Omit<Interaction, 'id'>, ctx: UserContext): Promise<Interaction> {
+    return apiRequest<Interaction>(`/api/contacts/${interaction.contact_id}/interactions`, { method: 'POST', body: interaction });
   }
 }
 
 // --- API Notification Repository ---
 export class ApiNotificationRepository implements INotificationRepository {
-  async getAllForRole(role: RoleType, userContext?: UserContext): Promise<Notification[]> {
-    return apiRequest<Notification[]>(`/api/notifications?role=${role}`, { userContext });
+  async getAllForRole(role: RoleType, ctx: UserContext): Promise<Notification[]> {
+    return apiRequest<Notification[]>(`/api/notifications?role=${role}`);
   }
 
-  async create(notification: Omit<Notification, 'id' | 'created_at'>, userContext?: UserContext): Promise<Notification> {
-    return apiRequest<Notification>('/api/notifications', { method: 'POST', body: notification, userContext });
+  async create(notification: Omit<Notification, 'id' | 'created_at'>, ctx: UserContext): Promise<Notification> {
+    return apiRequest<Notification>('/api/notifications', { method: 'POST', body: notification });
   }
 
-  async markAsRead(id: string, userContext?: UserContext): Promise<void> {
-    return apiRequest<void>(`/api/notifications/${id}/read`, { method: 'PATCH', userContext });
+  async markAsRead(id: string, ctx: UserContext): Promise<void> {
+    return apiRequest<void>(`/api/notifications/${id}/read`, { method: 'PATCH' });
   }
 
-  async markAllAsRead(role: RoleType, userContext?: UserContext): Promise<void> {
-    return apiRequest<void>(`/api/notifications/read-all`, { method: 'POST', body: { role }, userContext });
+  async markAllAsRead(role: RoleType, ctx: UserContext): Promise<void> {
+    return apiRequest<void>(`/api/notifications/read-all`, { method: 'POST', body: { role } });
   }
 }
 
 // --- API Audit Repository ---
 export class ApiAuditRepository implements IAuditRepository {
-  async getAll(filter?: { entityType?: string; userId?: string; limit?: number }): Promise<AuditLogEntry[]> {
-    const query = new URLSearchParams(filter as any).toString();
+  async getAll(filter: AuditFilter | undefined, ctx: UserContext): Promise<AuditLogEntry[]> {
+    const query = new URLSearchParams((filter || {}) as any).toString();
     return apiRequest<AuditLogEntry[]>(`/api/audit${query ? `?${query}` : ''}`);
   }
 
-  async log(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>): Promise<void> {
+  async log(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>, ctx: UserContext): Promise<void> {
     return apiRequest<void>('/api/audit', { method: 'POST', body: entry });
   }
 }
 
 // --- API User Repository ---
 export class ApiUserRepository implements IUserRepository {
-  async getAll(): Promise<User[]> {
+  async getAll(ctx: UserContext): Promise<User[]> {
     return apiRequest<User[]>('/api/users');
   }
 
-  async getById(id: string): Promise<User | null> {
+  async getById(id: string, ctx: UserContext): Promise<User | null> {
     return apiRequest<User | null>(`/api/users/${id}`);
   }
 
@@ -356,22 +385,33 @@ export class ApiUserRepository implements IUserRepository {
     return apiRequest<(User & { password_hash: string; password_salt: string }) | null>(`/api/users/username/${encodeURIComponent(username)}`);
   }
 
-  async getByRole(role: RoleType): Promise<User[]> {
+  async getByRole(role: RoleType, ctx: UserContext): Promise<User[]> {
     return apiRequest<User[]>(`/api/users/role/${role}`);
   }
 
-  async updatePassword(userId: string, hash: string, salt: string): Promise<void> {
+  async updatePassword(userId: string, hash: string, salt: string, ctx: UserContext): Promise<void> {
     return apiRequest<void>(`/api/users/${userId}/password`, { method: 'PATCH', body: { hash, salt } });
   }
 }
 
 // --- API Settings Repository ---
 export class ApiSettingsRepository implements ISettingsRepository {
-  async getSettings(): Promise<SystemSettings> {
+  async getSettings(ctx: UserContext): Promise<SystemSettings> {
     return apiRequest<SystemSettings>('/api/settings');
   }
 
-  async updateSettings(settings: Partial<SystemSettings>): Promise<SystemSettings> {
+  async updateSettings(settings: Partial<SystemSettings>, ctx: UserContext): Promise<SystemSettings> {
     return apiRequest<SystemSettings>('/api/settings', { method: 'PATCH', body: settings });
   }
 }
+
+// Export singleton API instances for client consumption
+export const meetingRepo = new ApiMeetingRepository();
+export const correspondenceRepo = new ApiCorrespondenceRepository();
+export const directiveRepo = new ApiDirectiveRepository();
+export const matterRepo = new ApiMatterRepository();
+export const contactRepo = new ApiContactRepository();
+export const notificationRepo = new ApiNotificationRepository();
+export const auditRepo = new ApiAuditRepository();
+export const userRepo = new ApiUserRepository();
+export const settingsRepo = new ApiSettingsRepository();

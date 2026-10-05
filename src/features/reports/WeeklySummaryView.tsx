@@ -6,7 +6,7 @@ import {
   correspondenceRepo,
   directiveRepo,
   matterRepo
-} from '../../data/sqlite/repositories';
+} from '../../data/api/apiRepositories';
 import {
   Meeting,
   Correspondence,
@@ -46,7 +46,7 @@ export const WeeklySummaryView: React.FC = () => {
   const [selectedWeek, setSelectedWeek] = useState('2026-W40');
 
   const loadData = async () => {
-    const userCtx = { can_view_confidential: currentUser.can_view_confidential, role: currentUser.role };
+    const userCtx = { userId: currentUser.id, can_view_confidential: currentUser.can_view_confidential, role: currentUser.role };
     const [mList, cList, dList, matList] = await Promise.all([
       meetingRepo.getAll(undefined, userCtx),
       correspondenceRepo.getAll(undefined, userCtx),

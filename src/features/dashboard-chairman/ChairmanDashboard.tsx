@@ -8,9 +8,7 @@ import {
   matterRepo,
   auditRepo,
   notificationRepo
-} from '../../data/sqlite/repositories';
-import { CommandService } from '../../domain/services/commandService';
-import { AuditLogger } from '../../domain/security/auditLogger';
+} from '../../data/api/apiRepositories';
 import {
   Meeting,
   Correspondence,
@@ -99,7 +97,8 @@ export const ChairmanDashboard: React.FC<ChairmanDashboardProps> = ({ onNavigate
 
   const handleSelectLetter = async (letter: Correspondence) => {
     setSelectedLetter(letter);
-    const note = await correspondenceRepo.getBriefingNote(letter.id);
+    const userCtx = { can_view_confidential: currentUser.can_view_confidential, role: currentUser.role, userId: currentUser.id };
+    const note = await correspondenceRepo.getBriefingNote(letter.id, userCtx);
     setBriefingNote(note);
   };
 
@@ -117,21 +116,22 @@ export const ChairmanDashboard: React.FC<ChairmanDashboardProps> = ({ onNavigate
     setIsSubmitting(true);
     try {
       const phraseText = `${standardPhrase}${customDirective ? ` - ${customDirective}` : ''}`;
+      const ctx = { userId: currentUser.id, role: currentUser.role, can_view_confidential: Boolean(currentUser.can_view_confidential) };
 
-      await CommandService.recordApproval({
+      await correspondenceRepo.recordApproval({
         correspondence_id: selectedLetter.id,
         decision_type: decisionType,
         standard_phrase: standardPhrase,
         custom_directive: customDirective,
         decided_at: new Date().toISOString(),
         decided_by_name: currentUser.name
-      }, currentUser);
+      }, ctx);
 
       const newStatus = decisionType === 'approved' ? 'approved' : decisionType === 'rejected' ? 'rejected' : decisionType === 'postponed' ? 'postponed' : 'referred';
-      await CommandService.updateCorrespondence(selectedLetter.id, { status: newStatus }, currentUser);
+      await correspondenceRepo.update(selectedLetter.id, { status: newStatus }, ctx);
 
       if (decisionType === 'referred' || (decisionType === 'approved' && customDirective)) {
-        await CommandService.addRouting({
+        await correspondenceRepo.addRouting({
           correspondence_id: selectedLetter.id,
           from_entity: 'مكتب رئيس مجلس الإدارة',
           to_department_id: 'dept-auto',
@@ -140,10 +140,10 @@ export const ChairmanDashboard: React.FC<ChairmanDashboardProps> = ({ onNavigate
           deadline: referralDeadline,
           status: 'sent',
           routed_at: new Date().toISOString()
-        }, currentUser);
+        }, ctx);
 
         const nextCode = await directiveRepo.getNextCode();
-        await CommandService.createDirective({
+        await directiveRepo.create({
           code: nextCode,
           title: `تكليف رئاسي بشأن: ${selectedLetter.subject}`,
           instruction: phraseText,
@@ -159,16 +159,16 @@ export const ChairmanDashboard: React.FC<ChairmanDashboardProps> = ({ onNavigate
           due_date: referralDeadline,
           matter_id: selectedLetter.matter_id || null,
           created_by: currentUser.name
-        }, currentUser);
+        }, ctx);
       }
 
-      await CommandService.createNotification({
+      await notificationRepo.create({
         recipient_role: 'SECRETARY',
         title: `تأشيرة جديدة من السيد رئيس مجلس الإدارة`,
         body: `تم إصدار تأشيرة على الخطاب رقم ${selectedLetter.serial_number}: ${phraseText}`,
         confidentiality: selectedLetter.confidentiality,
         is_read: false
-      }, currentUser);
+      }, ctx);
 
       setIsEndorsementModalOpen(false);
       setCustomDirective('');

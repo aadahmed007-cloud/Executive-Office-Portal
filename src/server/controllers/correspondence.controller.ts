@@ -11,7 +11,7 @@ export class CorrespondenceController {
         matterId: req.query.matterId as string,
         search: req.query.search as string
       };
-      const list = await correspondenceRepo.getAll(filter, req.userContext);
+      const list = await correspondenceRepo.getAll(filter, req.userContext!);
       res.json(list);
     } catch (err) {
       next(err);
@@ -31,7 +31,7 @@ export class CorrespondenceController {
 
   static async getById(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const item = await correspondenceRepo.getById(req.params.id, req.userContext);
+      const item = await correspondenceRepo.getById(req.params.id, req.userContext!);
       if (!item) {
         res.status(404).json({ error: 'المعاملة غير موجودة' });
         return;
@@ -44,7 +44,7 @@ export class CorrespondenceController {
 
   static async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const created = await BackendCommandService.createCorrespondence(req.body, req.userContext);
+      const created = await BackendCommandService.createCorrespondence(req.body, req.userContext!);
       res.status(201).json(created);
     } catch (err) {
       next(err);
@@ -53,7 +53,7 @@ export class CorrespondenceController {
 
   static async update(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const updated = await correspondenceRepo.update(req.params.id, req.body, req.userContext);
+      const updated = await correspondenceRepo.update(req.params.id, req.body, req.userContext!);
       res.json(updated);
     } catch (err) {
       next(err);
@@ -62,7 +62,7 @@ export class CorrespondenceController {
 
   static async softDelete(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const success = await correspondenceRepo.softDelete(req.params.id, req.userContext);
+      const success = await correspondenceRepo.softDelete(req.params.id, req.userContext!);
       res.json({ success });
     } catch (err) {
       next(err);
@@ -71,7 +71,7 @@ export class CorrespondenceController {
 
   static async getBriefing(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const note = await correspondenceRepo.getBriefingNote(req.params.id, req.userContext);
+      const note = await correspondenceRepo.getBriefingNote(req.params.id, req.userContext!);
       res.json(note);
     } catch (err) {
       next(err);
@@ -80,7 +80,7 @@ export class CorrespondenceController {
 
   static async saveBriefing(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const saved = await correspondenceRepo.saveBriefingNote(req.body, req.userContext);
+      const saved = await correspondenceRepo.saveBriefingNote(req.body, req.userContext!);
       res.json(saved);
     } catch (err) {
       next(err);
@@ -89,7 +89,7 @@ export class CorrespondenceController {
 
   static async getApproval(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const approval = await correspondenceRepo.getApproval(req.params.id, req.userContext);
+      const approval = await correspondenceRepo.getApproval(req.params.id, req.userContext!);
       res.json(approval);
     } catch (err) {
       next(err);
@@ -98,7 +98,7 @@ export class CorrespondenceController {
 
   static async recordApproval(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const recorded = await correspondenceRepo.recordApproval(req.body, req.userContext);
+      const recorded = await correspondenceRepo.recordApproval(req.body, req.userContext!);
       res.json(recorded);
     } catch (err) {
       next(err);
@@ -107,7 +107,7 @@ export class CorrespondenceController {
 
   static async getRoutings(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const list = await correspondenceRepo.getRoutings(req.params.id, req.userContext);
+      const list = await correspondenceRepo.getRoutings(req.params.id, req.userContext!);
       res.json(list);
     } catch (err) {
       next(err);
@@ -116,7 +116,7 @@ export class CorrespondenceController {
 
   static async addRouting(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const created = await correspondenceRepo.addRouting(req.body, req.userContext);
+      const created = await correspondenceRepo.addRouting(req.body, req.userContext!);
       res.status(201).json(created);
     } catch (err) {
       next(err);
@@ -125,7 +125,7 @@ export class CorrespondenceController {
 
   static async getAttachments(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const list = await correspondenceRepo.getAttachments(req.params.id, req.userContext);
+      const list = await correspondenceRepo.getAttachments(req.params.id, req.userContext!);
       res.json(list);
     } catch (err) {
       next(err);
@@ -134,7 +134,7 @@ export class CorrespondenceController {
 
   static async addAttachment(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const created = await correspondenceRepo.addAttachment(req.body, req.userContext);
+      const created = await correspondenceRepo.addAttachment(req.body, req.userContext!);
       res.status(201).json(created);
     } catch (err) {
       next(err);

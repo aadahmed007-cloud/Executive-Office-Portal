@@ -34,6 +34,25 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_active_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  ip_address TEXT,
+  user_agent TEXT,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS login_security (
+  username TEXT PRIMARY KEY,
+  failed_attempts INTEGER DEFAULT 0,
+  locked_until TEXT,
+  last_failed_at TEXT,
+  last_success_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS matters (
   id TEXT PRIMARY KEY,
   code TEXT UNIQUE NOT NULL,
@@ -269,7 +288,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
   timestamp TEXT NOT NULL,
   ip_address TEXT NOT NULL,
   prev_hash TEXT,
-  entry_hash TEXT NOT NULL
+  entry_hash TEXT NOT NULL,
+  is_confidential INTEGER DEFAULT 0
 );
 
 -- Audit log immutability triggers (Append-Only)

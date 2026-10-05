@@ -19,23 +19,27 @@ export const LoginView: React.FC = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [techDetails, setTechDetails] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !password) {
       setErrorMessage('يرجى إدخال اسم المستخدم وكلمة المرور');
+      setTechDetails(null);
       return;
     }
     if (throttleSecondsRemaining > 0) return;
 
     setErrorMessage(null);
+    setTechDetails(null);
     setIsSubmitting(true);
 
     try {
       const result = await login(username.trim(), password);
       if (!result.success) {
         setErrorMessage(result.error || 'فشل تسجيل الدخول');
+        setTechDetails(result.technicalDetails || null);
       }
     } finally {
       setIsSubmitting(false);
@@ -57,15 +61,22 @@ export const LoginView: React.FC = () => {
           <h1 className="text-lg sm:text-xl font-bold text-white tracking-wide">{t('app.title')}</h1>
           <p className="text-xs text-emerald-400 font-medium">{t('app.authority')}</p>
           <div className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-slate-800 text-slate-400 border border-slate-700">
-            نموذج محمي بتشفير PBKDF2 Web Crypto
+            جلسات عمل آمنة ومحمية على الخادم
           </div>
         </div>
 
         {/* Error Alert */}
         {errorMessage && (
-          <div className="p-3 bg-rose-950/60 border border-rose-800/80 rounded-xl text-rose-200 text-xs flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0" />
-            <span>{errorMessage}</span>
+          <div className="p-3 bg-rose-950/60 border border-rose-800/80 rounded-xl text-rose-200 text-xs space-y-1">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+              <span className="font-medium">{errorMessage}</span>
+            </div>
+            {techDetails && (
+              <div className="text-[10px] text-rose-300/80 font-mono pr-6">
+                {techDetails}
+              </div>
+            )}
           </div>
         )}
 
@@ -137,7 +148,7 @@ export const LoginView: React.FC = () => {
         <div className="pt-4 border-t border-slate-800 text-slate-400 text-[11px] space-y-2 text-center">
           <div className="flex items-center justify-center gap-1.5 text-slate-400">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>نظام سيادي مخصص لمكتب رئيس مجلس الإدارة والقيادات المصرح لها</span>
+            <span>منظومة محمية مخصصة لمكتب رئيس مجلس الإدارة والقيادات المصرح لها</span>
           </div>
           <p className="text-[10px] text-slate-500 font-mono">
             جميع محاولات الدخول وحركات الحسابات موثقة بسجل رقابي تشفيري غير قابل للتعديل.

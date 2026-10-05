@@ -8,7 +8,7 @@ export class MattersController {
         status: req.query.status as string,
         search: req.query.search as string
       };
-      const list = await matterRepo.getAll(filter, req.userContext);
+      const list = await matterRepo.getAll(filter, req.userContext!);
       res.json(list);
     } catch (err) {
       next(err);
@@ -17,7 +17,7 @@ export class MattersController {
 
   static async getById(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const item = await matterRepo.getById(req.params.id, req.userContext);
+      const item = await matterRepo.getById(req.params.id, req.userContext!);
       if (!item) {
         res.status(404).json({ error: 'الملف غير موجود' });
         return;
@@ -30,7 +30,7 @@ export class MattersController {
 
   static async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const created = await matterRepo.create(req.body, req.userContext);
+      const created = await matterRepo.create(req.body, req.userContext!);
       res.status(201).json(created);
     } catch (err) {
       next(err);
@@ -39,7 +39,7 @@ export class MattersController {
 
   static async update(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const updated = await matterRepo.update(req.params.id, req.body, req.userContext);
+      const updated = await matterRepo.update(req.params.id, req.body, req.userContext!);
       res.json(updated);
     } catch (err) {
       next(err);
@@ -48,7 +48,7 @@ export class MattersController {
 
   static async softDelete(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const success = await matterRepo.softDelete(req.params.id, req.userContext);
+      const success = await matterRepo.softDelete(req.params.id, req.userContext!);
       res.json({ success });
     } catch (err) {
       next(err);
@@ -57,7 +57,7 @@ export class MattersController {
 
   static async getLinks(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const list = await matterRepo.getLinks(req.params.id, req.userContext);
+      const list = await matterRepo.getLinks(req.params.id, req.userContext!);
       res.json(list);
     } catch (err) {
       next(err);
@@ -66,7 +66,7 @@ export class MattersController {
 
   static async addLink(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const created = await matterRepo.addLink(req.body, req.userContext);
+      const created = await matterRepo.addLink(req.body, req.userContext!);
       res.status(201).json(created);
     } catch (err) {
       next(err);
@@ -75,7 +75,7 @@ export class MattersController {
 
   static async removeLink(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const success = await matterRepo.removeLink(req.params.linkId, req.userContext);
+      const success = await matterRepo.removeLink(req.params.linkId, req.userContext!);
       res.json({ success });
     } catch (err) {
       next(err);

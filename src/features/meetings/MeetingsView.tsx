@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../../i18n/i18nContext';
-import { meetingRepo, auditRepo, matterRepo } from '../../data/sqlite/repositories';
-import { CommandService } from '../../domain/services/commandService';
+import { meetingRepo, auditRepo, matterRepo } from '../../data/api/apiRepositories';
 import { Meeting, Matter } from '../../domain/types';
 import { detectMeetingConflict } from '../../domain/rules/conflictDetector';
 import { maskConfidentialMeeting } from '../../domain/rules/confidentiality';
@@ -49,7 +48,7 @@ export const MeetingsView: React.FC = () => {
   const isSecretary = currentUser.role === 'SECRETARY';
 
   const loadMeetings = async () => {
-    const userCtx = { can_view_confidential: currentUser.can_view_confidential, role: currentUser.role };
+    const userCtx = { userId: currentUser.id, can_view_confidential: currentUser.can_view_confidential, role: currentUser.role };
     const [list, mList] = await Promise.all([
       meetingRepo.getAll(undefined, userCtx),
       matterRepo.getAll(undefined, userCtx)
@@ -92,7 +91,8 @@ export const MeetingsView: React.FC = () => {
   const handleCreateMeeting = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const result = await CommandService.createMeeting({
+    const ctx = { userId: currentUser.id, role: currentUser.role, can_view_confidential: Boolean(currentUser.can_view_confidential) };
+    const result = await meetingRepo.create({
       title: newTitle,
       location: newLocation,
       start_time: newStartTime,
@@ -103,7 +103,7 @@ export const MeetingsView: React.FC = () => {
       matter_id: newMatterId || null,
       notes: newNotes,
       created_by: currentUser.name
-    }, currentUser);
+    }, ctx);
 
     setIsNewMeetingModalOpen(false);
     setNewTitle('');

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../../i18n/i18nContext';
-import { contactRepo } from '../../data/sqlite/repositories';
+import { contactRepo } from '../../data/api/apiRepositories';
 import { Contact } from '../../domain/types';
 import {
   Users2,
@@ -21,8 +21,9 @@ export const ContactsView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    contactRepo.getAll().then((list) => setContacts(list));
-  }, []);
+    const userCtx = { can_view_confidential: Boolean(currentUser?.can_view_confidential), role: currentUser?.role || 'SECRETARY', userId: currentUser?.id || 'system' };
+    contactRepo.getAll(userCtx).then((list) => setContacts(list));
+  }, [currentUser]);
 
   const filteredContacts = contacts.filter((c) => {
     if (!searchQuery) return true;

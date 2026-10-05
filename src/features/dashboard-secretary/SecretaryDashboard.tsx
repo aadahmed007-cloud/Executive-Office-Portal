@@ -6,7 +6,7 @@ import {
   correspondenceRepo,
   directiveRepo,
   matterRepo
-} from '../../data/sqlite/repositories';
+} from '../../data/api/apiRepositories';
 import {
   Meeting,
   Correspondence,

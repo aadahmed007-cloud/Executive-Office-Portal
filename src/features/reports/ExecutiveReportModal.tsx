@@ -7,7 +7,7 @@ import {
   matterRepo,
   meetingRepo,
   auditRepo
-} from '../../data/sqlite/repositories';
+} from '../../data/api/apiRepositories';
 import {
   Correspondence,
   Directive,
@@ -151,6 +151,7 @@ export const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({ isOp
   const reportCode = `REP-${new Date().getFullYear()}-${reportType === 'weekly' ? 'WK' : reportType === 'monthly' ? 'M' : 'STR'}-${Math.floor(Math.random() * 900 + 100)}`;
 
   const handlePrint = async () => {
+    const userCtx = { can_view_confidential: Boolean(currentUser?.can_view_confidential), role: currentUser?.role || 'SECRETARY', userId: currentUser?.id || 'system' };
     await auditRepo.log({
       user_id: currentUser.id,
       user_name: currentUser.name,
@@ -161,7 +162,7 @@ export const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({ isOp
       before_value: null,
       after_value: `تصدير وطباعة تقرير ينفيذي (${reportType === 'weekly' ? 'أسبوعي' : reportType === 'monthly' ? 'شهري' : 'استراتيجي'}) للفترة من ${startDate} إلى ${endDate}`,
       ip_address: '10.120.4.x (LAN)'
-    });
+    }, userCtx);
 
     window.print();
   };

@@ -5,9 +5,7 @@ import {
   directiveRepo,
   matterRepo,
   notificationRepo
-} from '../../data/sqlite/repositories';
-import { CommandService } from '../../domain/services/commandService';
-import { AuditLogger } from '../../domain/security/auditLogger';
+} from '../../data/api/apiRepositories';
 import { Directive, Matter } from '../../domain/types';
 import { analyzeOverdue } from '../../domain/rules/overdueLogic';
 import { maskConfidentialDirective } from '../../domain/rules/confidentiality';
@@ -74,7 +72,8 @@ export const DirectivesView: React.FC = () => {
     e.preventDefault();
     const nextCode = await directiveRepo.getNextCode();
 
-    const created = await CommandService.createDirective({
+    const ctx = { userId: currentUser.id, role: currentUser.role, can_view_confidential: Boolean(currentUser.can_view_confidential) };
+    const created = await directiveRepo.create({
       code: nextCode,
       title: newTitle,
       instruction: newInstruction,
@@ -89,15 +88,15 @@ export const DirectivesView: React.FC = () => {
       due_date: newDueDate,
       matter_id: newMatterId || null,
       created_by: currentUser.name
-    }, currentUser);
+    }, ctx);
 
-    await CommandService.createNotification({
+    await notificationRepo.create({
       recipient_role: 'SECRETARY',
       title: `تكليف رئاسي جديد (${created.code})`,
       body: `أصدر السيد رئيس مجلس الإدارة تكليفاً جديداً بشأن: ${created.title}`,
       confidentiality: created.confidentiality,
       is_read: false
-    }, currentUser);
+    }, ctx);
 
     setIsCreateModalOpen(false);
     setNewTitle('');

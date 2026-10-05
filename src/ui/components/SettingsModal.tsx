@@ -1,9 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useAuth } from '../../features/auth/AuthContext';
 import { useI18n } from '../../i18n/i18nContext';
-import { sqliteEngine } from '../../data/database/sqliteEngine';
-import { auditRepo } from '../../data/sqlite/repositories';
-import { sha256Hex } from '../../domain/security/cryptoUtils';
+import { auditRepo } from '../../data/api/apiRepositories';
 import {
   X,
   Database,
@@ -42,223 +40,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
   if (!isOpen) return null;
 
   const handleResetData = async () => {
-    if (!window.confirm('هل أنت متأكد من رغبتك في إعادة ضبط قاعدة بيانات SQLite للبيانات النموذجية الافتراضية؟')) {
-      return;
-    }
-    setIsResetting(true);
-    try {
-      await sqliteEngine.resetToSeed();
-      await auditRepo.log({
-        user_id: currentUser.id,
-        user_name: currentUser.name,
-        user_role: currentUser.role,
-        action_type: 'UPDATE',
-        entity_type: 'DATABASE',
-        entity_id: 'sqlite_seed_reset',
-        before_value: 'بيانات معدلة محلياً',
-        after_value: 'استعادة البيانات النموذجية الافتراضية لبريد مصر',
-        ip_address: '<LAN_CLIENT_IP>'
-      });
-      setResetSuccess(true);
-      onDataReset();
-      setTimeout(() => setResetSuccess(false), 3000);
-    } finally {
-      setIsResetting(false);
-    }
+    alert('إعادة الضبط متاحة عبر خادم النظام.');
   };
 
   const handleExportClick = () => {
-    setExportBlockedError(null);
-    if (currentUser.role !== 'ADMIN') {
-      setExportBlockedError('تصدير قاعدة بيانات SQLite محظور: هذه الخاصية مقصورة حصرياً على مسؤول النظم (ADMIN/IT)، لأن الملف يحتوي على كافة البيانات الخام دون حجب.');
-      return;
-    }
-    setShowExportWarning(true);
+    alert('تصدير النسخ الاحتياطية يتاح عبر خادم النظام.');
   };
 
-  const executeExport = () => {
-    setShowExportWarning(false);
-    const blob = sqliteEngine.exportBlob();
-    if (!blob) return;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `egypt_post_chairmans_office_backup_${new Date().toISOString().split('T')[0]}.sqlite`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    auditRepo.log({
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
-      action_type: 'EXPORT',
-      entity_type: 'SQLITE_DATABASE_BACKUP',
-      entity_id: 'full_database',
-      before_value: null,
-      after_value: 'تصدير نسخة احتياطية من ملف قاعدة البيانات .sqlite (كاملة غير محجوبة)',
-      ip_address: '<LAN_CLIENT_IP>'
-    }).catch(() => {});
-  };
+  const executeExport = () => {};
 
   const handleExportJson = async () => {
-    const tables = [
-      'users',
-      'departments',
-      'correspondence',
-      'briefing_notes',
-      'approvals',
-      'directives',
-      'directive_updates',
-      'meetings',
-      'meeting_attendees',
-      'agenda_items',
-      'meeting_minutes',
-      'decisions',
-      'matters',
-      'matter_links',
-      'contacts',
-      'interactions',
-      'notifications',
-      'audit_log',
-      'settings'
-    ];
-    const dump: Record<string, any[]> = {};
-    for (const tbl of tables) {
-      dump[tbl] = sqliteEngine.query(`SELECT * FROM ${tbl}`);
-    }
-
-    const payloadString = JSON.stringify(dump);
-    const checksum = await sha256Hex(payloadString);
-
-    const manifest = {
-      manifest_version: '1.0',
-      app_name: "Chairman's Office Assistant - Egypt Post",
-      export_date: new Date().toISOString(),
-      exported_by: currentUser.name,
-      exported_by_role: currentUser.role,
-      checksum_sha256: checksum,
-      tables_count: tables.length,
-      data: dump
-    };
-
-    const jsonStr = JSON.stringify(manifest, null, 2);
-    const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `egypt_post_backup_manifest_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    await auditRepo.log({
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
-      action_type: 'EXPORT',
-      entity_type: 'JSON_BACKUP_MANIFEST',
-      entity_id: `chk-${checksum.substring(0, 8)}`,
-      before_value: null,
-      after_value: `تصدير نسخة احتياطية مشفرة بـ SHA-256 (${tables.length} جدول)`,
-      ip_address: '<LAN_CLIENT_IP>'
-    });
+    alert('تصدير النسخ الاحتياطية متاح عبر خادم النظام للمسؤولين.');
   };
 
   const handleRestoreFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsRestoring(true);
-    setRestoreStatus(null);
-
-    try {
-      if (file.name.endsWith('.sqlite') || file.name.endsWith('.db')) {
-        const buffer = await file.arrayBuffer();
-        const uint8 = new Uint8Array(buffer);
-        const res = await sqliteEngine.restoreFromBinary(uint8);
-        if (!res.success) {
-          setRestoreStatus({ success: false, message: res.error || 'فشل استعادة ملف SQLite' });
-        } else {
-          setRestoreStatus({ success: true, message: `تمت استعادة قاعدة البيانات بنجاح (${res.tablesCount} جدول موثق)` });
-          await auditRepo.log({
-            user_id: currentUser.id,
-            user_name: currentUser.name,
-            user_role: currentUser.role,
-            action_type: 'UPDATE',
-            entity_type: 'DATABASE_RESTORE',
-            entity_id: file.name,
-            before_value: 'قاعدة بيانات سابقة',
-            after_value: `استعادة كاملة لملف SQLite (${file.name})`,
-            ip_address: '<LAN_CLIENT_IP>'
-          });
-          onDataReset();
-        }
-      } else if (file.name.endsWith('.json')) {
-        const text = await file.text();
-        const parsed = JSON.parse(text);
-
-        if (!parsed.data || !parsed.checksum_sha256) {
-          setRestoreStatus({ success: false, message: 'ملف JSON غير متوافق: تنقصه بيانات التحقق وبصمة SHA-256' });
-          return;
-        }
-
-        // Verify SHA-256 Checksum
-        const dataStr = JSON.stringify(parsed.data);
-        const computedChecksum = await sha256Hex(dataStr);
-
-        if (computedChecksum !== parsed.checksum_sha256) {
-          setRestoreStatus({
-            success: false,
-            message: 'فشل التحقق الأمني: بصمة SHA-256 لا تطابق محتوى الملف، مما يشير إلى تلاعب أو تلف في البيانات'
-          });
-          return;
-        }
-
-        // Reset database and import tables
-        await sqliteEngine.resetToSeed();
-        for (const [tbl, rows] of Object.entries<any[]>(parsed.data)) {
-          if (tbl === 'audit_log') continue; // keep audit log immutable
-          for (const row of rows) {
-            const cols = Object.keys(row);
-            const placeholders = cols.map(() => '?').join(', ');
-            const vals = Object.values(row);
-            try {
-              sqliteEngine.run(`INSERT OR REPLACE INTO ${tbl} (${cols.join(', ')}) VALUES (${placeholders})`, vals);
-            } catch (err) {
-              // ignore table schema differences if any
-            }
-          }
-        }
-        await sqliteEngine.persist();
-
-        await auditRepo.log({
-          user_id: currentUser.id,
-          user_name: currentUser.name,
-          user_role: currentUser.role,
-          action_type: 'UPDATE',
-          entity_type: 'DATABASE_RESTORE_JSON',
-          entity_id: `chk-${computedChecksum.substring(0, 8)}`,
-          before_value: 'بيانات سابقة',
-          after_value: `استعادة ملف JSON موثق ببصمة SHA-256 (${file.name})`,
-          ip_address: '<LAN_CLIENT_IP>'
-        });
-
-        setRestoreStatus({ success: true, message: 'تم استيراد واستعادة البيانات بنجاح بعد التحقق من بصمة SHA-256' });
-        onDataReset();
-      } else {
-        setRestoreStatus({ success: false, message: 'صيغة الملف غير مدعومة. يرجى اختيار ملف .sqlite أو .json' });
-      }
-    } catch (err: any) {
-      setRestoreStatus({ success: false, message: `خطأ أثناء المعالجة: ${err.message}` });
-    } finally {
-      setIsRestoring(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    }
+    alert('استعادة قاعدة البيانات تدار عبر الخادم الخاطف.');
   };
 
   return (

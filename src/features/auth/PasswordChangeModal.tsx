@@ -4,6 +4,7 @@ import { KeyRound, ShieldAlert, CheckCircle2 } from 'lucide-react';
 
 export const PasswordChangeModal: React.FC = () => {
   const { changePassword, dismissPasswordChangePrompt } = useAuth();
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -13,19 +14,24 @@ export const PasswordChangeModal: React.FC = () => {
     e.preventDefault();
     setError(null);
 
-    if (newPassword.length < 8) {
-      setError('يجب ألا تقل كلمة المرور عن 8 أحرف وأرقام');
+    if (!currentPassword) {
+      setError('يرجى إدخال كلمة المرور الحالية');
+      return;
+    }
+
+    if (newPassword.length < 12) {
+      setError('يجب ألا تقل كلمة المرور الجديدة عن 12 حرفاً ورمزاً لضمان الأمان');
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setError('كلمة المرور وتأكيدها غير متطابقين');
+      setError('كلمة المرور الجديدة وتأكيدها غير متطابقين');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const res = await changePassword(newPassword);
+      const res = await changePassword(newPassword, currentPassword);
       if (!res.success) {
         setError(res.error || 'تعذر تحديث كلمة المرور');
       }
@@ -42,8 +48,8 @@ export const PasswordChangeModal: React.FC = () => {
             <KeyRound className="w-5 h-5 text-amber-700" />
           </div>
           <div>
-            <h3 className="font-bold text-sm text-slate-900">إلزامية تغيير كلمة المرور عند أول تسجيل دخول</h3>
-            <p className="text-xs text-slate-500">تم ضبط الحساب لإلزامك بتعيين كلمة مرور شخصية جديدة</p>
+            <h3 className="font-bold text-sm text-slate-900">إلزامية تغيير كلمة المرور لتأمين الحساب</h3>
+            <p className="text-xs text-slate-500">تم ضبط الحساب لإلزامك بتعيين كلمة مرور شخصية قوية (12 حرفاً على الأقل)</p>
           </div>
         </div>
 
@@ -56,14 +62,26 @@ export const PasswordChangeModal: React.FC = () => {
 
         <form onSubmit={handleSubmit} className="space-y-3 text-xs">
           <div>
-            <label className="block font-bold text-slate-700 mb-1">كلمة المرور الجديدة:</label>
+            <label className="block font-bold text-slate-700 mb-1">كلمة المرور الحالية (الأولية):</label>
             <input
               type="password"
               required
-              minLength={8}
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="أدخل كلمة المرور الحالية"
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
+            />
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">كلمة المرور الجديدة (12 حرفاً على الأقل):</label>
+            <input
+              type="password"
+              required
+              minLength={12}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="8 أحرف أو أرقام على الأقل"
+              placeholder="12 حرفاً أو رقماً أو رمزاً على الأقل"
               className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
             />
           </div>
@@ -73,10 +91,10 @@ export const PasswordChangeModal: React.FC = () => {
             <input
               type="password"
               required
-              minLength={8}
+              minLength={12}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="إعادة كتابة كلمة المرور"
+              placeholder="إعادة كتابة كلمة المرور الجديدة"
               className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
             />
           </div>

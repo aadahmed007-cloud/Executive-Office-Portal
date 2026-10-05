@@ -11,7 +11,7 @@ export class DirectivesController {
         matterId: req.query.matterId as string,
         search: req.query.search as string
       };
-      const list = await directiveRepo.getAll(filter, req.userContext);
+      const list = await directiveRepo.getAll(filter, req.userContext!);
       res.json(list);
     } catch (err) {
       next(err);
@@ -30,7 +30,7 @@ export class DirectivesController {
 
   static async getById(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const item = await directiveRepo.getById(req.params.id, req.userContext);
+      const item = await directiveRepo.getById(req.params.id, req.userContext!);
       if (!item) {
         res.status(404).json({ error: 'التكليف غير موجود' });
         return;
@@ -43,7 +43,7 @@ export class DirectivesController {
 
   static async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const created = await BackendCommandService.createDirective(req.body, req.userContext);
+      const created = await BackendCommandService.createDirective(req.body, req.userContext!);
       res.status(201).json(created);
     } catch (err) {
       next(err);
@@ -52,7 +52,7 @@ export class DirectivesController {
 
   static async update(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const updated = await directiveRepo.update(req.params.id, req.body, req.userContext);
+      const updated = await directiveRepo.update(req.params.id, req.body, req.userContext!);
       res.json(updated);
     } catch (err) {
       next(err);
@@ -61,7 +61,7 @@ export class DirectivesController {
 
   static async softDelete(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const success = await directiveRepo.softDelete(req.params.id, req.userContext);
+      const success = await directiveRepo.softDelete(req.params.id, req.userContext!);
       res.json({ success });
     } catch (err) {
       next(err);
@@ -70,7 +70,7 @@ export class DirectivesController {
 
   static async getUpdates(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const list = await directiveRepo.getUpdates(req.params.id, req.userContext);
+      const list = await directiveRepo.getUpdates(req.params.id, req.userContext!);
       res.json(list);
     } catch (err) {
       next(err);
@@ -79,7 +79,7 @@ export class DirectivesController {
 
   static async addUpdate(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const created = await directiveRepo.addUpdate(req.body, req.userContext);
+      const created = await directiveRepo.addUpdate(req.body, req.userContext!);
       res.status(201).json(created);
     } catch (err) {
       next(err);

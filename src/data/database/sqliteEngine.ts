@@ -242,11 +242,61 @@ class SqliteEngine {
     }
 
     // Seed Users
-    for (const u of INITIAL_USERS) {
-      this.db.run(
-        'INSERT OR IGNORE INTO users (id, name, title, department_id, email, role, can_view_confidential, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        this.sanitizeParams([u.id, u.name, u.title, u.department_id, u.email, u.role, u.can_view_confidential, u.avatar, u.created_at])
-      );
+    const userCountRows = this.query<{ count: number }>('SELECT count(*) as count FROM users');
+    const existingUserCount = userCountRows[0]?.count || 0;
+
+    if (existingUserCount === 0) {
+      const isTestEnv = process.env.NODE_ENV === 'test' || Boolean(process.env.VITEST);
+      if (!isTestEnv) {
+        console.log('\n======================================================');
+        console.log('🔑 INITIAL SECURITY PROVISIONING: CREATING USERS');
+        console.log('======================================================');
+      }
+
+      for (const u of INITIAL_USERS) {
+        let initPass = '';
+        let passHash = u.password_hash;
+        let passSalt = u.password_salt;
+
+        try {
+          const cryptoMod = await import('crypto');
+          const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*';
+          const bytes = cryptoMod.default.randomBytes(16);
+          for (let i = 0; i < 16; i++) initPass += chars[bytes[i] % chars.length];
+          const salt = cryptoMod.default.randomBytes(16);
+          const hash = cryptoMod.default.pbkdf2Sync(initPass, salt, 600000, 32, 'sha256');
+          passHash = hash.toString('hex');
+          passSalt = salt.toString('hex');
+        } catch (err) {
+          throw new Error('Required cryptographic module is not available for secure user provisioning: ' + String(err));
+        }
+
+        if (!isTestEnv) {
+          console.log(`👤 User: [${u.username}] (${u.role}) -> Initial Password: ${initPass}`);
+        }
+
+        this.db.run(
+          'INSERT OR IGNORE INTO users (id, username, name, title, department_id, email, role, can_view_confidential, password_hash, password_salt, must_change_password, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          this.sanitizeParams([
+            u.id,
+            u.username,
+            u.name,
+            u.title,
+            u.department_id,
+            u.email,
+            u.role,
+            u.can_view_confidential,
+            passHash,
+            passSalt,
+            1, // must_change_password = 1
+            u.avatar,
+            u.created_at
+          ])
+        );
+      }
+      if (!isTestEnv) {
+        console.log('======================================================\n');
+      }
     }
 
     // Seed Matters
@@ -357,8 +407,8 @@ class SqliteEngine {
     // Seed Audit Log
     for (const a of INITIAL_AUDIT_LOG) {
       this.db.run(
-        'INSERT OR IGNORE INTO audit_log (id, user_id, user_name, user_role, action_type, entity_type, entity_id, before_value, after_value, timestamp, ip_address, prev_hash, entry_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        this.sanitizeParams([a.id, a.user_id, a.user_name, a.user_role, a.action_type, a.entity_type, a.entity_id, a.before_value, a.after_value, a.timestamp, a.ip_address, a.prev_hash, a.entry_hash])
+        'INSERT OR IGNORE INTO audit_log (id, user_id, user_name, user_role, action_type, entity_type, entity_id, before_value, after_value, timestamp, ip_address, prev_hash, entry_hash, is_confidential) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        this.sanitizeParams([a.id, a.user_id, a.user_name, a.user_role, a.action_type, a.entity_type, a.entity_id, a.before_value, a.after_value, a.timestamp, a.ip_address, a.prev_hash, a.entry_hash, (a as any).is_confidential || 0])
       );
     }
 

@@ -9,7 +9,7 @@ export class AuditController {
         userId: req.query.userId as string,
         limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 100
       };
-      const list = await auditRepo.getAll(filter);
+      const list = await auditRepo.getAll(filter, req.userContext!);
       res.json(list);
     } catch (err) {
       next(err);
@@ -18,7 +18,7 @@ export class AuditController {
 
   static async log(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      await auditRepo.log(req.body);
+      await auditRepo.log(req.body, req.userContext!);
       res.status(201).json({ success: true });
     } catch (err) {
       next(err);

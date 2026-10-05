@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../../i18n/i18nContext';
-import { auditRepo } from '../../data/sqlite/repositories';
-import { AuditLogger } from '../../domain/security/auditLogger';
+import { auditRepo } from '../../data/api/apiRepositories';
 import { verifyAuditLogIntegrity, IntegrityVerificationResult } from '../../domain/security/cryptoUtils';
 import { AuditLogEntry } from '../../domain/types';
 import {
@@ -48,8 +47,9 @@ export const AuditLogView: React.FC = () => {
 
   const loadAuditLogs = async () => {
     setIsLoading(true);
+    const userCtx = { can_view_confidential: Boolean(currentUser?.can_view_confidential), role: currentUser?.role || 'SECRETARY', userId: currentUser?.id || 'system' };
     try {
-      const list = await auditRepo.getAll({ limit: 250 });
+      const list = await auditRepo.getAll({ limit: 250 }, userCtx);
       setLogs(list);
       setIntegrityResult(null);
     } finally {
@@ -72,7 +72,21 @@ export const AuditLogView: React.FC = () => {
   };
 
   const handleExportCsv = async () => {
-    const csvContent = await AuditLogger.exportToCsv();
+    const headers = ['ID', 'Timestamp', 'User Name', 'Role', 'Action', 'Entity Type', 'Entity ID', 'Before', 'After', 'IP', 'Hash'];
+    const rows = logs.map((l) => [
+      l.id,
+      l.timestamp,
+      `"${l.user_name}"`,
+      l.user_role,
+      l.action_type,
+      l.entity_type,
+      l.entity_id,
+      `"${(l.before_value || '').replace(/"/g, '""')}"`,
+      `"${(l.after_value || '').replace(/"/g, '""')}"`,
+      l.ip_address,
+      l.entry_hash
+    ]);
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

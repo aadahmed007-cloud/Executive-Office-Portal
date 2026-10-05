@@ -6,8 +6,7 @@ import {
   auditRepo,
   matterRepo,
   notificationRepo
-} from '../../data/sqlite/repositories';
-import { CommandService } from '../../domain/services/commandService';
+} from '../../data/api/apiRepositories';
 import { Correspondence, Matter } from '../../domain/types';
 import { maskConfidentialCorrespondence } from '../../domain/rules/confidentiality';
 import { CorrespondenceDetailModal } from './CorrespondenceDetailModal';
@@ -84,7 +83,7 @@ export const CorrespondenceView: React.FC = () => {
   const isSecretary = currentUser.role === 'SECRETARY';
 
   const loadData = async () => {
-    const userCtx = { can_view_confidential: currentUser.can_view_confidential, role: currentUser.role };
+    const userCtx = { userId: currentUser.id, can_view_confidential: currentUser.can_view_confidential, role: currentUser.role };
     const [cList, mList] = await Promise.all([
       correspondenceRepo.getAll(undefined, userCtx),
       matterRepo.getAll(undefined, userCtx)
@@ -119,7 +118,8 @@ export const CorrespondenceView: React.FC = () => {
     e.preventDefault();
     const nextSerial = await correspondenceRepo.getNextSerial(newType);
 
-    const created = await CommandService.createCorrespondence({
+    const ctx = { userId: currentUser.id, role: currentUser.role, can_view_confidential: Boolean(currentUser.can_view_confidential) };
+    const created = await correspondenceRepo.create({
       serial_number: nextSerial,
       type: newType,
       date: new Date().toISOString().split('T')[0],
@@ -133,17 +133,17 @@ export const CorrespondenceView: React.FC = () => {
       status: newType === 'incoming' ? 'registered' : 'draft',
       matter_id: newMatterId || null,
       created_by: currentUser.name
-    }, currentUser);
+    }, ctx);
 
     // Notify Chairman if urgent
     if (newPriority === 'top_urgent' || newPriority === 'urgent') {
-      await CommandService.createNotification({
+      await notificationRepo.create({
         recipient_role: 'CHAIRMAN',
         title: `خطاب جديد عاجل: ${created.serial_number}`,
         body: `ورد خطاب عاجل من ${created.source_or_dest_entity} بشأن: ${created.subject}`,
         confidentiality: created.confidentiality,
         is_read: false
-      }, currentUser);
+      }, ctx);
     }
 
     setIsRegisterModalOpen(false);

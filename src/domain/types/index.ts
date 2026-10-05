@@ -264,6 +264,7 @@ export interface AuditLogEntry {
   ip_address: string;
   prev_hash?: string | null;
   entry_hash?: string;
+  is_confidential?: number | boolean;
 }
 
 export interface SystemSettings {

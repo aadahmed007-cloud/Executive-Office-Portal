@@ -6,7 +6,7 @@ import {
   contactRepo,
   notificationRepo,
   auditRepo
-} from '../../data/sqlite/repositories';
+} from '../../server/repositories/index.js';
 import {
   User,
   Meeting,
@@ -84,7 +84,7 @@ export class CommandService {
         confidentiality: created.confidentiality
       }),
       ip_address: ip
-    });
+    }, ctx);
 
     return created;
   }
@@ -115,7 +115,7 @@ export class CommandService {
       before_value: JSON.stringify({ status: before.status, priority: before.priority, subject: before.subject }),
       after_value: JSON.stringify({ status: updated.status, priority: updated.priority, subject: updated.subject }),
       ip_address: ip
-    });
+    }, ctx);
 
     return updated;
   }
@@ -145,7 +145,7 @@ export class CommandService {
       before_value: `رقم المعاملة: ${before.serial_number}`,
       after_value: 'تم النقل للأرشيف/الحذف المنطقي',
       ip_address: ip
-    });
+    }, ctx);
 
     return success;
   }
@@ -173,7 +173,7 @@ export class CommandService {
       before_value: null,
       after_value: `مذكرة عرض للمعاملة ${note.correspondence_id} بواسطة ${actor.name}`,
       ip_address: ip
-    });
+    }, ctx);
 
     return saved;
   }
@@ -204,7 +204,7 @@ export class CommandService {
       before_value: 'قيد العرض والمراجعة',
       after_value: `تأشيرة رئاسية معتمدة: ${approval.decision_type} - ${approval.standard_phrase}`,
       ip_address: ip
-    });
+    }, ctx);
 
     return recorded;
   }
@@ -232,7 +232,7 @@ export class CommandService {
       before_value: null,
       after_value: `إحالة إلى: ${routing.to_department_name} - الإجراء المطلوب: ${routing.action_required}`,
       ip_address: ip
-    });
+    }, ctx);
 
     return added;
   }
@@ -257,7 +257,7 @@ export class CommandService {
       before_value: null,
       after_value: `ملف: ${att.file_name} (${att.file_size_kb}KB) - سرية: ${att.confidentiality}`,
       ip_address: ip
-    });
+    }, ctx);
 
     return added;
   }
@@ -275,7 +275,7 @@ export class CommandService {
     const ctx = toUserContext(actor);
 
     // Check conflict
-    const allMeetings = await meetingRepo.getAll(undefined, { can_view_confidential: true });
+    const allMeetings = await meetingRepo.getAll(undefined, ctx);
     const conflictResult = detectMeetingConflict(
       { location: data.location, start_time: data.start_time, end_time: data.end_time },
       allMeetings
@@ -300,7 +300,7 @@ export class CommandService {
         conflictDetected: isConflicted
       }),
       ip_address: ip
-    });
+    }, ctx);
 
     return { meeting: created, conflictDetected: isConflicted };
   }
@@ -331,7 +331,7 @@ export class CommandService {
       before_value: JSON.stringify({ title: before.title, status: before.status, start_time: before.start_time }),
       after_value: JSON.stringify({ title: updated.title, status: updated.status, start_time: updated.start_time }),
       ip_address: ip
-    });
+    }, ctx);
 
     return updated;
   }
@@ -361,7 +361,7 @@ export class CommandService {
       before_value: `اجتماع: ${before.title}`,
       after_value: 'تم الإلغاء/الحذف المنطقي',
       ip_address: ip
-    });
+    }, ctx);
 
     return success;
   }
@@ -387,7 +387,7 @@ export class CommandService {
       before_value: null,
       after_value: `تحديث قائمة الحضور: ${attendees.length} مشارك`,
       ip_address: ip
-    });
+    }, ctx);
   }
 
   static async setAgenda(
@@ -411,7 +411,7 @@ export class CommandService {
       before_value: null,
       after_value: `تحديث جدول الأعمال: ${items.length} بند`,
       ip_address: ip
-    });
+    }, ctx);
   }
 
   static async saveMinutes(
@@ -434,7 +434,7 @@ export class CommandService {
       before_value: null,
       after_value: `محضر اجتماع: ${minutes.status} بواسطة ${actor.name}`,
       ip_address: ip
-    });
+    }, ctx);
 
     return saved;
   }
@@ -459,7 +459,7 @@ export class CommandService {
       before_value: null,
       after_value: `قرار اجتماع: ${decision.content} المكلف: ${decision.assigned_to_name}`,
       ip_address: ip
-    });
+    }, ctx);
 
     return added;
   }
@@ -494,7 +494,7 @@ export class CommandService {
         confidentiality: created.confidentiality
       }),
       ip_address: ip
-    });
+    }, ctx);
 
     return created;
   }
@@ -525,7 +525,7 @@ export class CommandService {
       before_value: JSON.stringify({ status: before.status, progress: before.progress_percent }),
       after_value: JSON.stringify({ status: updated.status, progress: updated.progress_percent }),
       ip_address: ip
-    });
+    }, ctx);
 
     return updated;
   }
@@ -555,7 +555,7 @@ export class CommandService {
       before_value: `تكليف: ${before.code} - ${before.title}`,
       after_value: 'تم الحفظ في الأرشيف/الحذف المنطقي',
       ip_address: ip
-    });
+    }, ctx);
 
     return success;
   }
@@ -580,7 +580,7 @@ export class CommandService {
       before_value: null,
       after_value: `متابعة إنجاز: ${update.progress_percent}% - ملاحظات: ${update.notes}`,
       ip_address: ip
-    });
+    }, ctx);
 
     return added;
   }
@@ -614,7 +614,7 @@ export class CommandService {
         confidentiality: created.confidentiality
       }),
       ip_address: ip
-    });
+    }, ctx);
 
     return created;
   }
@@ -645,7 +645,7 @@ export class CommandService {
       before_value: JSON.stringify({ status: before.status, priority: before.priority }),
       after_value: JSON.stringify({ status: updated.status, priority: updated.priority }),
       ip_address: ip
-    });
+    }, ctx);
 
     return updated;
   }
@@ -675,7 +675,7 @@ export class CommandService {
       before_value: `ملف استراتيجي: ${before.code} - ${before.title}`,
       after_value: 'تم النقل للأرشيف/الحذف المنطقي',
       ip_address: ip
-    });
+    }, ctx);
 
     return success;
   }
@@ -700,7 +700,7 @@ export class CommandService {
       before_value: null,
       after_value: `ربط بند: ${link.title} بالملف الاستراتيجي ${link.matter_id}`,
       ip_address: ip
-    });
+    }, ctx);
 
     return added;
   }
@@ -726,7 +726,7 @@ export class CommandService {
       before_value: `ارتباط بالملف ${matterId}`,
       after_value: 'تم فك الربط بنجاح',
       ip_address: ip
-    });
+    }, ctx);
 
     return success;
   }
@@ -755,7 +755,7 @@ export class CommandService {
       before_value: null,
       after_value: `جهة اتصال: ${created.name} (${created.entity} - ${created.position})`,
       ip_address: ip
-    });
+    }, ctx);
 
     return created;
   }
@@ -781,7 +781,7 @@ export class CommandService {
       before_value: null,
       after_value: `تحديث بيانات جهة الاتصال: ${updated.name}`,
       ip_address: ip
-    });
+    }, ctx);
 
     return updated;
   }
@@ -794,7 +794,7 @@ export class CommandService {
     assertAuthenticated(actor);
     const ctx = toUserContext(actor);
 
-    const contact = await contactRepo.getById(id);
+    const contact = await contactRepo.getById(id, ctx);
     const success = await contactRepo.softDelete(id, ctx);
 
     await auditRepo.log({
@@ -807,7 +807,7 @@ export class CommandService {
       before_value: contact ? contact.name : id,
       after_value: 'تم الحذف من دليل الاتصال',
       ip_address: ip
-    });
+    }, ctx);
 
     return success;
   }
@@ -832,7 +832,7 @@ export class CommandService {
       before_value: null,
       after_value: `تسجيل تواصل: ${interaction.interaction_type} - ${interaction.summary}`,
       ip_address: ip
-    });
+    }, ctx);
 
     return added;
   }

@@ -68,7 +68,7 @@ export const LockScreen: React.FC = () => {
           <div className="text-right">
             <label className="block text-xs font-medium text-slate-300 mb-1.5 flex items-center justify-between">
               <span>أدخل كلمة المرور لفك القفل:</span>
-              <span className="text-[10px] text-slate-500 font-mono">التحقق عبر PBKDF2</span>
+              <span className="text-[10px] text-slate-500 font-mono">التحقق من الهوية</span>
             </label>
             <div className="relative">
               <input
