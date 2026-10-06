@@ -1,7 +1,7 @@
 # وثيقة التسليم الفني ومتطلبات النشر (Technical Handoff & Deployment Document)
 ## منظومة «مكتب مساعد رئيس مجلس الإدارة» — نموذج أولي استعراضي (Prototype)
 
-- **الحالة الحالية:** Prototype v0.x: design validation only. Not approved for production. Pending security review and backend implementation.
+- **الحالة الحالية:** Advanced Prototype / Pre-Production Alpha. Pending final security audit and load testing.
 - **التاريخ:** أكتوبر 2026
 - **المستهدف:** فريق هندسة النظم وتكنولوجيا المعلومات والفرق الأمنية المعنية بمراجعة التصميم
 

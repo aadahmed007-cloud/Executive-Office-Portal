@@ -9,9 +9,32 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const isProduction = process.env.NODE_ENV === 'production';
-const PORT = parseInt(process.env.PORT || '3000', 10);
+// In AI Studio and Docker container environment, Nginx listens on 8080 and proxies to port 3000
+const PORT = parseInt(process.env.APP_PORT || (process.env.PORT === '8080' ? '3000' : process.env.PORT || '3000'), 10);
 
 export async function startServer() {
+  // Validate or automatically initialize cryptographic secrets
+  const isProd = process.env.NODE_ENV === 'production';
+  if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET === 'REPLACE_WITH_STRONG_RANDOM_64_CHAR_SECRET') {
+    if (isProd) {
+      console.error('❌ FATAL: Critical environment variable SESSION_SECRET is missing or has placeholder value.');
+      process.exit(1);
+    } else {
+      process.env.SESSION_SECRET = (await import('crypto')).randomBytes(32).toString('hex');
+      console.log('ℹ️  Development/Preview mode: auto-generated volatile SESSION_SECRET.');
+    }
+  }
+
+  if (!process.env.BACKUP_PASSPHRASE || process.env.BACKUP_PASSPHRASE === 'REPLACE_WITH_STRONG_OFFLINE_PASSPHRASE') {
+    if (isProd) {
+      console.error('❌ FATAL: Critical environment variable BACKUP_PASSPHRASE is missing or has placeholder value.');
+      process.exit(1);
+    } else {
+      process.env.BACKUP_PASSPHRASE = (await import('crypto')).randomBytes(24).toString('hex');
+      console.log('ℹ️  Development/Preview mode: auto-generated volatile BACKUP_PASSPHRASE.');
+    }
+  }
+
   console.log('\n======================================================================');
   console.log('🏛️  EGYPT NATIONAL POST - CHAIRMAN OFFICE EXECUTIVE PORTAL');
   console.log('⚠️  NOTICE: Database is running in SQLite In-Memory mode.');

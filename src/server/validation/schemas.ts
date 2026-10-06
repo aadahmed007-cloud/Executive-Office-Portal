@@ -7,7 +7,6 @@ import { z } from 'zod';
 
 // --- Correspondence Schemas ---
 export const createCorrespondenceSchema = z.object({
-  id: z.string().optional(),
   type: z.enum(['incoming', 'outgoing']),
   date: z.string().min(1),
   source_or_dest_entity: z.string().min(1),
@@ -17,10 +16,7 @@ export const createCorrespondenceSchema = z.object({
   summary: z.string().nullable().optional(),
   matter_id: z.string().nullable().optional(),
   category: z.string().optional(),
-  tags: z.array(z.string()).optional(),
-  serial_number: z.string().optional(),
-  status: z.string().optional(),
-  created_by: z.string().optional()
+  tags: z.array(z.string()).optional()
 }).strict();
 
 export const updateCorrespondenceSchema = z.object({
@@ -72,9 +68,12 @@ export const recordApprovalSchema = z.object({
 export const addRoutingSchema = z.object({
   correspondence_id: z.string().min(1),
   from_entity: z.string().min(1),
-  to_entity: z.string().min(1),
+  to_entity: z.string().optional(),
+  to_department_id: z.string().optional(),
+  to_department_name: z.string().optional(),
   action_required: z.string().min(1),
   notes: z.string().nullable().optional(),
+  deadline: z.string().optional(),
   due_date: z.string().nullable().optional()
 }).strict();
 
@@ -97,9 +96,7 @@ export const createDirectiveSchema = z.object({
   priority: z.enum(['normal', 'urgent', 'top_urgent']),
   confidentiality: z.enum(['normal', 'confidential', 'secret', 'top_secret']).optional(),
   due_date: z.string().nullable().optional(),
-  matter_id: z.string().nullable().optional(),
-  created_by: z.string().optional(),
-  status: z.string().optional()
+  matter_id: z.string().nullable().optional()
 }).strict();
 
 export const updateDirectiveSchema = z.object({
@@ -123,8 +120,7 @@ export const addDirectiveUpdateSchema = z.object({
   directive_id: z.string().min(1),
   update_text: z.string().optional(),
   content: z.string().optional(),
-  progress_percent: z.number().min(0).max(100),
-  updated_by_name: z.string().optional()
+  progress_percent: z.number().min(0).max(100)
 }).strict();
 
 // --- Meetings Schemas ---
@@ -136,9 +132,7 @@ export const createMeetingSchema = z.object({
   meeting_type: z.string().min(1),
   matter_id: z.string().nullable().optional(),
   confidentiality: z.enum(['normal', 'confidential', 'secret', 'top_secret']).optional(),
-  status: z.string().optional(),
-  notes: z.string().nullable().optional(),
-  created_by: z.string().optional()
+  notes: z.string().nullable().optional()
 }).strict();
 
 export const updateMeetingSchema = z.object({
@@ -198,9 +192,7 @@ export const addDecisionSchema = z.object({
   assigned_department_id: z.string().nullable().optional(),
   assigned_to_name: z.string().optional(),
   due_date: z.string().nullable().optional(),
-  directive_id: z.string().nullable().optional(),
-  priority: z.enum(['normal', 'urgent', 'top_urgent']).optional(),
-  status: z.string().optional()
+  priority: z.enum(['normal', 'urgent', 'top_urgent']).optional()
 }).strict();
 
 // --- Matters Schemas ---

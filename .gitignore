@@ -1,13 +1,28 @@
+# Dependencies
 node_modules/
-build/
-dist/
-coverage/
-.DS_Store
-*.log
-.env*
-!.env.example
-data/
-backups/
+
+# Production builds & coverage (anchored to root)
+/dist/
+/dist-temp/
+/coverage/
+/build/
+
+# Runtime data & backups (anchored to root)
+/data/
+/var/
+/backups/
+
+# Database engine runtime files & logs
 *.db
 *.db-journal
 *.db-wal
+*.db-shm
+*.log
+
+# Environment variables
+.env*
+!.env.example
+
+# OS artifacts
+.DS_Store
+bun.lock

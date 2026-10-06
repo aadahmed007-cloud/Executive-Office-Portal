@@ -83,22 +83,25 @@ PRAGMA cache_size = -64000; -- 64MB Cache
 
 ---
 
-## 4. خطة النسخ الاحتياطي والتعافي من الكوارث (Backup & Disaster Recovery Strategy)
+## 4. استراتيجية النسخ الاحتياطي المشفر والتعافي من الكوارث (Encrypted Backup & DR)
 
-1. **النسخ الاحتياطي اليومي المتكامل:**
-   - استخدام أمر النسخ الاحتياطي الآمن لـ SQLite عبر السكربت المخصص:
-     ```bash
-     sqlite3 /var/lib/executive_portal/data/postal_executive.sqlite ".backup '/var/backups/postal_executive_$(date +%Y%m%d_%H%M%S).sqlite'"
-     ```
-   - النقل الآمن للنسخة إلى خادم التخزين الاحتياطي الداخلي المعزول.
+### ⚠️ المبادئ الإلزامية للأمان المؤسسي:
+1. **RAID ليس نسخة احتياطية (RAID is NOT a backup):** منظومات RAID تحمي من تلف الأقراص المادية فقط ولكنها لا تحمي من الحذف الخاطئ أو الهجمات التخريبية أو تلف البيانات المنطقي.
+2. **النسخ إلى جهاز أو مسار شبكي مستقل (Separate Device / Remote Share):** يجب نسخ ملفات النسخ الاحتياطي فور إنشائها إلى جهاز تخزين منفصل تماماً أو وحدة تخزين شبكية معزولة (Air-Gapped / Isolated Storage).
+3. **حفظ كلمة مرور التشفير في مكان آمن مغلق (Offline Sealed Passphrase):** يجب توليد `BACKUP_PASSPHRASE` قوية وتدوينها وحفظها في ظرف مغلق ومختوم داخل خزينة الإدارة (Safe Deposit) بعيداً عن ملفات النظام والخوادم.
+4. **اختبار استرجاع شهري دوري (Monthly Restore Drill):** إجراء تجربة استرجاع دورية كل شهر في بيئة معزولة للتأكد من سلامة النسخ وصلاحية كلمة المرور.
 
-2. **فترة الاحتفاظ بالنسخ (Retention Policy):**
-   - نسخ يومية لمدة 30 يوماً.
-   - نسخ أسبوعية لمدة 3 أشهر.
-   - نسخ شهرية لمدة عام مالي كامل.
+### أوامر إدارة وفحص النسخ الاحتياطي:
+```bash
+# 1. إنشاء نسخة احتياطية مشفرة مشتقة بمفتاح AES-256-GCM والتحقق التلقائي منها
+BACKUP_PASSPHRASE="YOUR_OFFLINE_SECRET" npm run backup
 
-3. **التحقق من سلامة النسخ (Integrity Check):**
-   - فحص دوري مجدول عبر `PRAGMA integrity_check;` على ملف النسخة الاحتياطية.
+# 2. التحقق الشامل من سلامة وتشفير أي ملف نسخة احتياطية وفحص سجل العمليات التشفيري
+BACKUP_PASSPHRASE="YOUR_OFFLINE_SECRET" npm run backup:verify -- var/backups/backup-20261005120000.db.enc
+
+# 3. اختبار استرجاع تجريبي معزول في دليل مؤقت ومقارنة عدد السجلات دون المساس بقاعدة البيانات الحية
+BACKUP_PASSPHRASE="YOUR_OFFLINE_SECRET" npm run backup:restore-test -- var/backups/backup-20261005120000.db.enc
+```
 
 ---
 

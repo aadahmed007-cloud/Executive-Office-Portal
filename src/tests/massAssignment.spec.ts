@@ -155,4 +155,90 @@ describe('Mass Assignment & Strict Validation Verification (Section A)', () => {
     const rows = sqliteEngine.query<any>('SELECT deleted_at FROM correspondence WHERE id = ?', [testConfCorrId]);
     expect(rows[0].deleted_at).toBeNull();
   });
+
+  it('6. POST with client-supplied forbidden keys (id, serial_number, status, created_by, progress_percent, created_at) returns 400 and writes nothing', async () => {
+    const forbiddenPayloads = [
+      { id: 'corr-injected-id' },
+      { serial_number: 'IN-FORGED-001' },
+      { status: 'approved' },
+      { created_by: 'usr-chairman' },
+      { progress_percent: 100 },
+      { created_at: '2020-01-01T00:00:00.000Z' },
+      { updated_at: '2020-01-01T00:00:00.000Z' },
+      { deleted_at: '2020-01-01T00:00:00.000Z' }
+    ];
+
+    const baseValid = {
+      type: 'incoming',
+      date: '2026-10-05',
+      source_or_dest_entity: 'هيئة الرقابة',
+      subject: 'اختبار الحقول المحظورة',
+      priority: 'normal'
+    };
+
+    const initialCount = sqliteEngine.query<{ count: number }>('SELECT count(*) as count FROM correspondence')[0].count;
+
+    for (const forbidden of forbiddenPayloads) {
+      const res = await request(app)
+        .post('/api/correspondence')
+        .set('Cookie', secretaryCookie)
+        .set('X-Requested-With', 'XMLHttpRequest')
+        .send({ ...baseValid, ...forbidden });
+
+      expect(res.status, `Expected 400 for payload with forbidden key: ${JSON.stringify(forbidden)}`).toBe(400);
+    }
+
+    const finalCount = sqliteEngine.query<{ count: number }>('SELECT count(*) as count FROM correspondence')[0].count;
+    expect(finalCount).toBe(initialCount);
+  });
+
+  it('7. POST without forbidden keys succeeds, and stored row has server-generated id/serial, initial status, and created_by = session user', async () => {
+    const validPayload = {
+      type: 'incoming',
+      date: '2026-10-05',
+      source_or_dest_entity: 'الهيئة القومية للبريد',
+      subject: 'معاملة رسمية صالحة من السكرتير',
+      priority: 'urgent',
+      summary: 'ملخص المعاملة الشرعية'
+    };
+
+    const res = await request(app)
+      .post('/api/correspondence')
+      .set('Cookie', secretaryCookie)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send(validPayload);
+
+    expect(res.status).toBe(201);
+    expect(res.body.id).toBeDefined();
+    expect(res.body.id).toMatch(/^corr-in-/);
+    expect(res.body.serial_number).toBeDefined();
+    expect(res.body.status).toBe('registered');
+
+    // Query DB to verify server-owned fields
+    const rows = sqliteEngine.query<any>('SELECT * FROM correspondence WHERE id = ?', [res.body.id]);
+    expect(rows.length).toBe(1);
+    expect(rows[0].status).toBe('registered');
+    expect(rows[0].created_by).toMatch(/^usr-sec-/);
+    expect(rows[0].serial_number).toBe(res.body.serial_number);
+  });
+
+  it('8. Uncleared user cannot create confidential item (returns 403 Forbidden)', async () => {
+    const confidentialPayload = {
+      type: 'incoming',
+      date: '2026-10-05',
+      source_or_dest_entity: 'مكتب سري',
+      subject: 'معاملة سرية من مستخدم غير مصرح',
+      priority: 'top_urgent',
+      confidentiality: 'secret'
+    };
+
+    const res = await request(app)
+      .post('/api/correspondence')
+      .set('Cookie', unclearedCookie)
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send(confidentialPayload);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toContain('تصريح أمني');
+  });
 });

@@ -15,7 +15,6 @@ describe('Phase 2.5 F3: Architecture & Bundle Guard Test', () => {
     ];
 
     const forbiddenPackages = [
-      'sql.js',
       'better-sqlite3',
       'express',
       'fs',

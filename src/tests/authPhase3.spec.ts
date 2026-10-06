@@ -107,9 +107,7 @@ describe('Phase 3: Server-Side Authorization & Confidentiality Enforcement', () 
         start_time: '2026-10-10T10:00:00Z',
         end_time: '2026-10-10T11:00:00Z',
         meeting_type: 'regular',
-        status: 'scheduled',
-        confidentiality: 'normal',
-        created_by: 'السكرتير التنفيذي'
+        confidentiality: 'normal'
       });
 
     expect(resMtg.status).toBe(201);
@@ -261,30 +259,24 @@ describe('Phase 3: Server-Side Authorization & Confidentiality Enforcement', () 
     // 2. Correspondence Create (POST /correspondence)
     // SEC: 201/200, CHM: 403, ADM: 403
     const resSecCreate = await request(app).post('/api/correspondence').set('Cookie', secretaryCookie).set('X-Requested-With', 'XMLHttpRequest').send({
-      serial_number: `OUT-${Date.now()}`,
       type: 'outgoing',
       date: '2026-10-04',
       source_or_dest_entity: 'وزارة الماليّة',
       subject: 'طلب اعتماد موازنة إضافية',
       priority: 'normal',
       confidentiality: 'normal',
-      summary: 'ملخص معتمد',
-      status: 'registered',
-      created_by: 'السكرتير التنفيذي'
+      summary: 'ملخص معتمد'
     });
     expect([200, 201]).toContain(resSecCreate.status);
 
     const resChmCreate = await request(app).post('/api/correspondence').set('Cookie', chairmanCookie).set('X-Requested-With', 'XMLHttpRequest').send({
-      serial_number: `OUT-CHM-${Date.now()}`,
       type: 'outgoing',
       date: '2026-10-04',
       source_or_dest_entity: 'وزارة الماليّة',
       subject: 'طلب اعتماد موازنة إضافية',
       priority: 'normal',
       confidentiality: 'normal',
-      summary: 'ملخص معتمد',
-      status: 'registered',
-      created_by: 'الرئيس'
+      summary: 'ملخص معتمد'
     });
     expect(resChmCreate.status).toBe(403);
 
@@ -423,9 +415,7 @@ describe('Phase 3: Server-Side Authorization & Confidentiality Enforcement', () 
         start_time: '2026-10-15T09:00:00Z',
         end_time: '2026-10-15T10:00:00Z',
         meeting_type: 'board',
-        status: 'scheduled',
-        confidentiality: 'normal',
-        created_by: 'السكرتير'
+        confidentiality: 'normal'
       });
     expect(resMtg.status).toBe(201);
     const mtgId = resMtg.body.id;
@@ -495,24 +485,21 @@ describe('Phase 3: Server-Side Authorization & Confidentiality Enforcement', () 
 
   it('verifies Chairman dashboard actions: cleared Chairman can comment, refer, and approve correspondence but SECRETARY cannot approve', async () => {
     // 1. Secretary creates a correspondence
-    const corrId = `corr-chm-actions-${Date.now()}`;
-    await request(app)
+    const resCreate = await request(app)
       .post('/api/correspondence')
       .set('Cookie', secretaryCookie)
       .set('X-Requested-With', 'XMLHttpRequest')
       .send({
-        id: corrId,
-        serial_number: `OUT-CHM-ACT-${Date.now()}`,
         type: 'outgoing',
         date: '2026-10-04',
         source_or_dest_entity: 'مجلس النواب',
         subject: 'عرض ميزانية التطوير السنوية',
         priority: 'urgent',
         confidentiality: 'normal',
-        summary: 'طلب ميزانية للتحول الرقمي',
-        status: 'registered',
-        created_by: 'السكرتير'
+        summary: 'طلب ميزانية للتحول الرقمي'
       });
+    expect(resCreate.status).toBe(201);
+    const corrId = resCreate.body.id;
 
     // 2. Chairman saves a briefing note / comment (comment action) -> 200 OK
     const resChmComment = await request(app)

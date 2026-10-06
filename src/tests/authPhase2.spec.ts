@@ -70,11 +70,12 @@ describe('Phase 2: Server-Side Authentication & Session Security', () => {
   });
 
   it('returns identical generic 401 error for unknown user and wrong password', async () => {
-    // 1. Unknown user
+    // 1. Unknown user (unique username to avoid lockout accumulation across test runs)
+    const unknownUser = `non_existent_acc_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const resUnknown = await request(app)
       .post('/api/auth/login')
       .set('X-Requested-With', 'XMLHttpRequest')
-      .send({ username: 'non_existent_account_999', password: 'WrongPassword123!' });
+      .send({ username: unknownUser, password: 'WrongPassword123!' });
 
     // 2. Wrong password for existing user
     const resWrongPass = await request(app)
