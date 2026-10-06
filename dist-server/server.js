@@ -5860,6 +5860,9 @@ var isProduction = process.env.NODE_ENV === "production";
 var PORT = parseInt(process.env.APP_PORT || (process.env.PORT === "8080" ? "3000" : process.env.PORT || "3000"), 10);
 async function startServer() {
   const isProd = process.env.NODE_ENV === "production";
+  if (!isProd) {
+    process.env.PREVIEW_MODE = process.env.PREVIEW_MODE || "true";
+  }
   if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET === "REPLACE_WITH_STRONG_RANDOM_64_CHAR_SECRET") {
     if (isProd) {
       console.error("\u274C FATAL: Critical environment variable SESSION_SECRET is missing or has placeholder value.");
@@ -5885,7 +5888,10 @@ async function startServer() {
   if (!isProduction) {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: process.env.DISABLE_HMR === "true" ? false : void 0
+      },
       appType: "spa"
     });
     app.use(vite.middlewares);
