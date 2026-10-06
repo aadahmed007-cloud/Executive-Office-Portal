@@ -30,14 +30,14 @@ export function createApp(): Express {
     }
   }
 
-  // Parse allowed frame ancestors: space-separated allowlist, default 'self' https://aistudio.google.com
+  // Parse allowed frame ancestors: space-separated allowlist, default 'self' https://aistudio.google.com https://*.google.com https://*.google.dev https://*.run.app
   // Strictly filter out '*' - never allow '*'
-  const rawAncestors = process.env.FRAME_ANCESTORS || "'self' https://aistudio.google.com";
+  const rawAncestors = process.env.FRAME_ANCESTORS || "'self' https://aistudio.google.com https://*.google.com https://*.google.dev https://*.run.app";
   const parsedAncestors = rawAncestors
     .split(/\s+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0 && s !== '*');
-  const allowedAncestors = parsedAncestors.length > 0 ? parsedAncestors : ["'self'", 'https://aistudio.google.com'];
+  const allowedAncestors = parsedAncestors.length > 0 ? parsedAncestors : ["'self'", 'https://aistudio.google.com', 'https://*.google.com', 'https://*.google.dev', 'https://*.run.app'];
 
   // 1. Trust Proxy Configuration: defaults to false (disabled); enabled strictly via TRUST_PROXY env
   app.set('trust proxy', process.env.TRUST_PROXY ? (process.env.TRUST_PROXY === 'true' ? true : parseInt(process.env.TRUST_PROXY, 10)) : false);

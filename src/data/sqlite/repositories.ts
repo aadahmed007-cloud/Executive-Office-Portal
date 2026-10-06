@@ -564,9 +564,10 @@ export class SqliteMeetingRepository implements IMeetingRepository {
       return (await this.getMinutes(minutes.meeting_id, ctx))!;
     } else {
       const id = `min-${Date.now()}`;
+      const draftContent = minutes.draft_content ?? '';
       sqliteEngine.run(
         'INSERT INTO meeting_minutes (id, meeting_id, draft_content, approved_content, status, approved_by, approved_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [id, minutes.meeting_id, minutes.draft_content || null, minutes.approved_content || null, minutes.status, minutes.approved_by || null, minutes.approved_at || null]
+        [id, minutes.meeting_id, draftContent, minutes.approved_content || null, minutes.status || 'draft', minutes.approved_by || null, minutes.approved_at || null]
       );
       return (await this.getMinutes(minutes.meeting_id, ctx))!;
     }
@@ -586,9 +587,15 @@ export class SqliteMeetingRepository implements IMeetingRepository {
     if (!parent) throw new SecurityAuthorizationError('الاجتماع غير موجود أو سري');
 
     const id = `dec-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const orderIndex = decision.order_index ?? 1;
+    const content = decision.content || (decision as any).decision_text || '';
+    const assignedToName = decision.assigned_to_name || (decision as any).assigned_to_entity || 'غير محدد';
+    const dueDate = decision.due_date || new Date().toISOString().split('T')[0];
+    const status = decision.status || 'pending';
+
     sqliteEngine.run(
       'INSERT INTO decisions (id, meeting_id, order_index, content, assigned_department_id, assigned_to_name, due_date, directive_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, decision.meeting_id, decision.order_index, decision.content, decision.assigned_department_id || null, decision.assigned_to_name, decision.due_date || new Date().toISOString().split('T')[0], decision.directive_id || null, decision.status || 'pending']
+      [id, decision.meeting_id, orderIndex, content, decision.assigned_department_id || null, assignedToName, dueDate, decision.directive_id || null, status]
     );
     const rows = sqliteEngine.query<Decision>('SELECT * FROM decisions WHERE id = ?', [id]);
     return rows[0];
@@ -727,7 +734,7 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
         data.subject,
         data.priority,
         confidentiality,
-        data.summary || null,
+        data.summary ?? '',
         status,
         data.matter_id || null,
         data.category || 'operations',
@@ -841,16 +848,22 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
     if (!parent) throw new SecurityAuthorizationError('المعاملة السرية غير متاحة دون تصريح أمني');
 
     const existing = await this.getBriefingNote(note.correspondence_id, ctx);
+    const background = note.background ?? (note as any).summary ?? '';
+    const secretary_recommendation = note.secretary_recommendation ?? (note as any).recommendation ?? '';
+    const executive_opinion = note.executive_opinion ?? (note as any).legal_opinion ?? '';
+    const prepared_by_name = note.prepared_by_name || ctx.userId || 'مستخدم النظام';
+    const prepared_at = note.prepared_at || new Date().toISOString();
+
     if (existing) {
       sqliteEngine.run(
         'UPDATE briefing_notes SET background = ?, secretary_recommendation = ?, executive_opinion = ?, prepared_by_name = ?, prepared_at = ? WHERE correspondence_id = ?',
-        [note.background, note.secretary_recommendation, note.executive_opinion, note.prepared_by_name, note.prepared_at, note.correspondence_id]
+        [background, secretary_recommendation, executive_opinion, prepared_by_name, prepared_at, note.correspondence_id]
       );
     } else {
       const id = `brief-${Date.now()}`;
       sqliteEngine.run(
         'INSERT INTO briefing_notes (id, correspondence_id, background, secretary_recommendation, executive_opinion, prepared_by_name, prepared_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [id, note.correspondence_id, note.background, note.secretary_recommendation, note.executive_opinion, note.prepared_by_name, note.prepared_at]
+        [id, note.correspondence_id, background, secretary_recommendation, executive_opinion, prepared_by_name, prepared_at]
       );
     }
     return (await this.getBriefingNote(note.correspondence_id, ctx))!;
@@ -871,9 +884,14 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
     if (!parent) throw new SecurityAuthorizationError('المعاملة غير موجودة أو محجوبة بالتصنيف السري');
 
     const id = `appr-${Date.now()}`;
+    const decision_type = approval.decision_type || (approval as any).decision || 'approved';
+    const standard_phrase = approval.standard_phrase || (approval as any).notes || 'معتمد';
+    const decided_at = approval.decided_at || new Date().toISOString();
+    const decided_by_name = approval.decided_by_name || ctx.userId || 'رئيس مجلس الإدارة';
+
     sqliteEngine.run(
       'INSERT INTO approvals (id, correspondence_id, decision_type, standard_phrase, custom_directive, decided_at, decided_by_name) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [id, approval.correspondence_id, approval.decision_type, approval.standard_phrase, approval.custom_directive || null, approval.decided_at, approval.decided_by_name]
+      [id, approval.correspondence_id, decision_type, standard_phrase, approval.custom_directive || null, decided_at, decided_by_name]
     );
     return (await this.getApproval(approval.correspondence_id, ctx))!;
   }
@@ -892,9 +910,16 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
     if (!parent) throw new SecurityAuthorizationError('المعاملة غير موجودة أو محجوبة للتصنيف السري');
 
     const id = `rout-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const to_department_id = routing.to_department_id || (routing as any).to_entity || 'dept-general';
+    const to_department_name = routing.to_department_name || (routing as any).to_entity || 'الإدارة العامة';
+    const action_required = routing.action_required || 'للدراسة والعرض';
+    const deadline = routing.deadline || (routing as any).due_date || new Date().toISOString().split('T')[0];
+    const status = routing.status || 'sent';
+    const routed_at = routing.routed_at || new Date().toISOString();
+
     sqliteEngine.run(
       'INSERT INTO correspondence_routing (id, correspondence_id, from_entity, to_department_id, to_department_name, action_required, deadline, status, routed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, routing.correspondence_id, routing.from_entity, routing.to_department_id, routing.to_department_name, routing.action_required, routing.deadline, routing.status, routing.routed_at]
+      [id, routing.correspondence_id, routing.from_entity, to_department_id, to_department_name, action_required, deadline, status, routed_at]
     );
     const rows = sqliteEngine.query<CorrespondenceRouting>('SELECT * FROM correspondence_routing WHERE id = ?', [id]);
     return rows[0];
@@ -915,7 +940,8 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
     if (!can(ctx, 'update', 'correspondence')) {
       throw new SecurityAuthorizationError('غير مصرح بإضافة مرفقات إلى المكاتبة المسجلة');
     }
-    const parent = await this.getById(att.entity_id, ctx);
+    const entityId = att.entity_id || (att as any).correspondence_id;
+    const parent = await this.getById(entityId, ctx);
     if (!parent) throw new SecurityAuthorizationError('المعاملة غير موجودة أو سريّة');
 
     if (att.confidentiality !== 'normal' && !canAccessConfidential(ctx)) {
@@ -923,9 +949,16 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
     }
 
     const id = `att-${Date.now()}`;
+    const entityType = att.entity_type || 'correspondence';
+    const fileName = att.file_name || 'attachment.dat';
+    const fileSizeKb = att.file_size_kb ?? (att as any).file_size ?? 0;
+    const mimeType = att.mime_type || (att as any).file_type || 'application/octet-stream';
+    const confidentiality = att.confidentiality || 'normal';
+    const uploadedAt = att.uploaded_at || new Date().toISOString();
+
     sqliteEngine.run(
       'INSERT INTO attachments (id, entity_type, entity_id, file_name, file_size_kb, mime_type, confidentiality, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, att.entity_type, att.entity_id, att.file_name, att.file_size_kb, att.mime_type, att.confidentiality, att.uploaded_at]
+      [id, entityType, entityId, fileName, fileSizeKb, mimeType, confidentiality, uploadedAt]
     );
     const rows = sqliteEngine.query<Attachment>('SELECT * FROM attachments WHERE id = ?', [id]);
     return rows[0];
@@ -1013,7 +1046,7 @@ export class SqliteDirectiveRepository implements IDirectiveRepository {
         data.title,
         data.instruction,
         data.assigned_department,
-        data.assigned_person || null,
+        data.assigned_person ?? 'غير محدد',
         data.source_type,
         data.source_id || null,
         data.priority,
@@ -1021,7 +1054,7 @@ export class SqliteDirectiveRepository implements IDirectiveRepository {
         status,
         progress_percent,
         data.issued_at || now,
-        data.due_date,
+        data.due_date ?? new Date().toISOString().split('T')[0],
         data.matter_id || null,
         created_by,
         now
@@ -1080,13 +1113,17 @@ export class SqliteDirectiveRepository implements IDirectiveRepository {
 
     const id = `upd-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const now = new Date().toISOString();
+    const notes = (update as any).notes || (update as any).update_text || (update as any).content || '';
+    const progress_percent = update.progress_percent ?? 0;
+    const updated_by = (update as any).updated_by || (update as any).updated_by_name || ctx.userId || 'مستخدم';
+
     sqliteEngine.run(
-      'INSERT INTO directive_updates (id, directive_id, update_text, progress_percent, updated_by_name, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-      [id, update.directive_id, (update as any).update_text || (update as any).content || '', update.progress_percent, (update as any).updated_by_name || update.updated_by || '', now]
+      'INSERT INTO directive_updates (id, directive_id, notes, progress_percent, updated_by, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [id, update.directive_id, notes, progress_percent, updated_by, now]
     );
 
     // Update parent directive progress
-    sqliteEngine.run('UPDATE directives SET progress_percent = ?, updated_at = ? WHERE id = ?', [update.progress_percent, now, update.directive_id]);
+    sqliteEngine.run('UPDATE directives SET progress_percent = ?, updated_at = ? WHERE id = ?', [progress_percent, now, update.directive_id]);
 
     const rows = sqliteEngine.query<DirectiveUpdate>('SELECT * FROM directive_updates WHERE id = ?', [id]);
     return rows[0];
@@ -1155,7 +1192,7 @@ export class SqliteMatterRepository implements IMatterRepository {
         id,
         code,
         data.title,
-        data.description || null,
+        data.description ?? '',
         confidentiality,
         status,
         data.lead_entity,
@@ -1259,7 +1296,7 @@ export class SqliteContactRepository implements IContactRepository {
     const now = new Date().toISOString();
     sqliteEngine.run(
       'INSERT INTO contacts (id, name, entity, position, phone, email, category, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, data.name, data.entity, data.position || null, data.phone || null, data.email || null, data.category || 'external', data.notes || null, now]
+      [id, data.name, data.entity, data.position ?? '', data.phone ?? '', data.email ?? '', data.category || 'external', data.notes || null, now]
     );
     return (await this.getById(id, ctx))!;
   }
@@ -1310,9 +1347,11 @@ export class SqliteContactRepository implements IContactRepository {
     if (!parent) throw new SecurityAuthorizationError('جهة الاتصال غير موجودة');
 
     const id = `int-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const interactionType = (interaction as any).interaction_type || (interaction as any).type || 'call';
+    const recordedBy = (interaction as any).recorded_by || ctx.userId || 'مستخدم';
     sqliteEngine.run(
-      'INSERT INTO interactions (id, contact_id, date, type, summary, follow_up_needed) VALUES (?, ?, ?, ?, ?, ?)',
-      [id, interaction.contact_id, interaction.date, (interaction as any).type || (interaction as any).interaction_type || '', interaction.summary, (interaction as any).follow_up_needed ? 1 : 0]
+      'INSERT INTO interactions (id, contact_id, interaction_type, date, summary, recorded_by) VALUES (?, ?, ?, ?, ?, ?)',
+      [id, interaction.contact_id, interactionType, interaction.date, interaction.summary, recordedBy]
     );
     const rows = sqliteEngine.query<Interaction>('SELECT * FROM interactions WHERE id = ?', [id]);
     return rows[0];

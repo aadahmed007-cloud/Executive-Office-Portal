@@ -4,20 +4,24 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "PREVIEW_MODE=true tsx server.ts",
+    "dev": "tsx server.ts",
     "dev:local": "tsx server.ts",
     "server": "tsx server.ts",
-    "start": "NODE_ENV=production tsx server.ts",
+    "start": "NODE_ENV=production node dist-server/server.js",
+    "build:server": "esbuild server.ts --platform=node --bundle --format=esm --packages=external --outfile=dist-server/server.js && esbuild scripts/verifyNative.ts --platform=node --bundle --format=esm --packages=external --outfile=dist-server/verifyNative.js",
+    "verify:native": "tsx scripts/verifyNative.ts",
+    "package:offline": "tsx scripts/packageOffline.ts",
+    "verify:package": "tsx scripts/verifyPackage.ts",
     "backup": "tsx scripts/backup.ts",
     "backup:verify": "tsx scripts/backup.ts --verify",
     "backup:restore-test": "tsx scripts/backup.ts --restore-test",
-    "build": "vite build",
+    "build": "vite build && npm run build:server",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "check": "npm run typecheck && npm run test && npm run build",
-    "clean": "rm -rf dist server.js"
+    "clean": "rm -rf dist dist-server release"
   },
   "dependencies": {
     "@tailwindcss/vite": "4.3.3",

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
 import { useI18n } from '../../i18n/i18nContext';
-import { Lock, ShieldCheck, KeyRound, LogOut, AlertTriangle, Unlock } from 'lucide-react';
+import { Lock, ShieldCheck, KeyRound, LogOut, AlertTriangle, Unlock, Eye, EyeOff } from 'lucide-react';
+import { PasswordField } from '../../ui/components/PasswordField';
 
 export const LockScreen: React.FC = () => {
   const { currentUser, unlockSession, logout } = useAuth();
@@ -70,21 +71,17 @@ export const LockScreen: React.FC = () => {
               <span>أدخل كلمة المرور لفك القفل:</span>
               <span className="text-[10px] text-slate-500 font-mono">التحقق من الهوية</span>
             </label>
-            <div className="relative">
-              <input
-                type="password"
-                required
-                autoFocus
-                placeholder="كلمة مرور الحساب..."
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setErrorMessage(null);
-                }}
-                className="w-full bg-slate-800/90 border border-slate-700 rounded-xl py-3 px-4 pl-10 text-white placeholder-slate-500 text-center font-mono text-sm tracking-wider focus:outline-none focus:border-emerald-500"
-              />
-              <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
-            </div>
+            <PasswordField
+              required
+              autoFocus
+              placeholder="كلمة مرور الحساب..."
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setErrorMessage(null);
+              }}
+              className="w-full bg-slate-800/90 border border-slate-700 rounded-xl py-3 px-4 text-white placeholder-slate-500 text-center font-mono text-sm tracking-wider focus:outline-none focus:border-emerald-500"
+            />
           </div>
 
           <div className="flex gap-2">

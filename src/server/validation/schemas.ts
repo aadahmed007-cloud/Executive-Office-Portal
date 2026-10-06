@@ -13,7 +13,7 @@ export const createCorrespondenceSchema = z.object({
   subject: z.string().min(1),
   priority: z.enum(['normal', 'urgent', 'top_urgent']),
   confidentiality: z.enum(['normal', 'confidential', 'secret', 'top_secret']).optional(),
-  summary: z.string().nullable().optional(),
+  summary: z.string().nullable().optional().transform(val => val ?? ''),
   matter_id: z.string().nullable().optional(),
   category: z.string().optional(),
   tags: z.array(z.string()).optional()
@@ -66,7 +66,7 @@ export const recordApprovalSchema = z.object({
 }).strict();
 
 export const addRoutingSchema = z.object({
-  correspondence_id: z.string().min(1),
+  correspondence_id: z.string().optional(),
   from_entity: z.string().min(1),
   to_entity: z.string().optional(),
   to_department_id: z.string().optional(),
@@ -78,10 +78,12 @@ export const addRoutingSchema = z.object({
 }).strict();
 
 export const addAttachmentSchema = z.object({
-  correspondence_id: z.string().min(1),
+  correspondence_id: z.string().optional(),
   file_name: z.string().min(1),
-  file_size: z.number().nonnegative(),
-  file_type: z.string().min(1),
+  file_size: z.number().nonnegative().optional(),
+  file_size_kb: z.number().nonnegative().optional(),
+  file_type: z.string().optional(),
+  mime_type: z.string().optional(),
   confidentiality: z.enum(['normal', 'confidential', 'secret', 'top_secret']).optional()
 }).strict();
 
@@ -90,12 +92,12 @@ export const createDirectiveSchema = z.object({
   title: z.string().min(1),
   instruction: z.string().min(1),
   assigned_department: z.string().min(1),
-  assigned_person: z.string().nullable().optional(),
+  assigned_person: z.string().nullable().optional().transform(v => v ?? 'غير محدد'),
   source_type: z.string().min(1),
   source_id: z.string().nullable().optional(),
   priority: z.enum(['normal', 'urgent', 'top_urgent']),
   confidentiality: z.enum(['normal', 'confidential', 'secret', 'top_secret']).optional(),
-  due_date: z.string().nullable().optional(),
+  due_date: z.string().nullable().optional().transform(v => v ?? new Date().toISOString().split('T')[0]),
   matter_id: z.string().nullable().optional()
 }).strict();
 
@@ -117,9 +119,10 @@ export const updateDirectiveStatusSchema = z.object({
 }).strict();
 
 export const addDirectiveUpdateSchema = z.object({
-  directive_id: z.string().min(1),
+  directive_id: z.string().optional(),
   update_text: z.string().optional(),
   content: z.string().optional(),
+  notes: z.string().optional(),
   progress_percent: z.number().min(0).max(100)
 }).strict();
 
@@ -198,7 +201,7 @@ export const addDecisionSchema = z.object({
 // --- Matters Schemas ---
 export const createMatterSchema = z.object({
   title: z.string().min(1),
-  description: z.string().optional(),
+  description: z.string().nullable().optional().transform(v => v ?? ''),
   confidentiality: z.enum(['normal', 'confidential', 'secret', 'top_secret']).optional(),
   lead_entity: z.string().min(1),
   priority: z.enum(['normal', 'urgent', 'top_urgent']).optional()
@@ -238,7 +241,7 @@ export const updateContactSchema = z.object({
 }).strict();
 
 export const addInteractionSchema = z.object({
-  contact_id: z.string().min(1),
+  contact_id: z.string().optional(),
   date: z.string().min(1),
   type: z.string().optional(),
   interaction_type: z.string().optional(),
@@ -270,8 +273,8 @@ export const loginSchema = z.object({
 }).strict();
 
 export const changePasswordSchema = z.object({
-  current_password: z.string().min(1),
-  new_password: z.string().min(8)
+  current_password: z.string().min(1, 'كلمة المرور الحالية مطلوبة'),
+  new_password: z.string().min(1, 'كلمة المرور الجديدة مطلوبة')
 }).strict();
 
 export const reauthSchema = z.object({

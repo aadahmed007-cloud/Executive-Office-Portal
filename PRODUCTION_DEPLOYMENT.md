@@ -1,5 +1,10 @@
 # دليل النشر والتشغيل في بيئة الإنتاج — PRODUCTION_DEPLOYMENT.md
-## Egyptian National Postal Authority — Internal LAN / On-Premise Deployment
+## Egyptian National Postal Authority — Internal LAN / On-Premise Air-Gapped Deployment
+### وثيقة إجراءات التشغيل والنشر المؤسسي لبوابة مكتب رئيس مجلس الإدارة
+
+---
+
+> ⚠️ **إشعار أمني هام:** النظام مصمم للعمل في شبكة داخلية معزولة تماماً (Air-Gapped). **لم يخضع النظام بعد لمراجعة أمنية واختبار اختراق مستقل.** لا يُعتبر معتمداً للإنتاج العام دون مصادقة إدارة الأمن السيبراني.
 
 ---
 
@@ -16,7 +21,7 @@
 │  - الترويسات الأمنية (CSP, HSTS, X-Frame-Options)      │
 │  - كبح الطلبات المتكررة (Rate Limiting)                │
 └───────────────────────────┬────────────────────────────┘
-                            │  HTTP (Localhost / Unix Socket)
+                            │  HTTP (127.0.0.1:3000)
                             ▼
 ┌────────────────────────────────────────────────────────┐
 │           خادم التطبيق (Node.js Express API)           │
@@ -39,35 +44,36 @@
 
 ## 2. إعدادات البيئة (Environment Variables)
 
-يتم ضبط المتغيرات في ملف `.env` غير المتصل بالإنترنت:
+يتم ضبط المتغيرات في ملف `.env` المحمي (`chmod 600`):
 
 ```bash
 # بيئة التشغيل
 NODE_ENV=production
 PORT=3000
 
-# أمان الجلسات
-SESSION_SECRET=REPLACE_WITH_STRONG_RANDOM_64_CHAR_SECRET
-SESSION_TIMEOUT_MINUTES=15
+# أمان الجلسات وتشفير النسخ الاحتياطي
+SESSION_SECRET=REPLACE_WITH_STRONG_RANDOM_64_HEX_STRING
+BACKUP_PASSPHRASE=REPLACE_WITH_STRONG_OFFLINE_PASSPHRASE
 
-# مسار قاعدة البيانات المحلي
-DATABASE_PATH=/var/lib/executive_portal/data/postal_executive.sqlite
-
-# مسار تخزين المرفقات المشفرة
+# مسارات البيانات المنفصلة خارج مجلد التطبيق البرمجي
+DATA_DIR=/var/lib/executive_portal/data
 ATTACHMENTS_DIR=/var/lib/executive_portal/attachments
+BACKUP_DIR=/var/backups/executive_portal
 
-# القيود الأمنية
-MAX_UPLOAD_SIZE_MB=25
-ENABLE_SECURE_COOKIES=true
+# الضوابط الأمنية
+COOKIE_SECURE=true
 TRUST_PROXY=true
+ALLOWED_ORIGINS=https://portal.local,https://192.168.10.50
+SESSION_IDLE_MINUTES=15
+SESSION_ABSOLUTE_HOURS=8
+RESTORE_ENABLED=false
 ```
 
 ---
 
-## 3. تهيئة محرك SQLite الإنتاجي (SQLite Production Configuration)
+## 3. تهيئة محرك SQLite الإنتاجي (SQLite Production Engine)
 
-عند إقلاع خادم الإنتاج، يتم تنفيذ الأوامر التالية على الاتصال الرئيسي:
-
+يتم ضبط خصائص SQLite التالية في خادم الإنتاج:
 ```sql
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
@@ -76,46 +82,88 @@ PRAGMA synchronous = NORMAL;
 PRAGMA cache_size = -64000; -- 64MB Cache
 ```
 
-### فوائد هذا التكوين:
 - **نمط WAL:** يسمح بالقراءة المتزامنة دون إعاقة عمليات الكتابة.
-- **مهلة الانتظار (busy_timeout):** تمنع أخطاء `database is locked` عند حدوث عمليات متزامنة.
-- **سلامة المفاتيح الأجنبية (foreign_keys):** تضمن عدم وجود سجلات يتيمة في المراسلات والاجتماعات والتكليفات.
+- **مهلة الانتظار (busy_timeout):** تمنع أخطاء `database is locked`.
+- **سلامة المفاتيح الأجنبية (foreign_keys):** تضمن عدم وجود سجلات يتيمة.
 
 ---
 
-## 4. استراتيجية النسخ الاحتياطي المشفر والتعافي من الكوارث (Encrypted Backup & DR)
+## 4. دليل التثبيت والتشغيل الميداني للمكتب المعزول (Air-Gapped Installation Sections A–L)
 
-### ⚠️ المبادئ الإلزامية للأمان المؤسسي:
-1. **RAID ليس نسخة احتياطية (RAID is NOT a backup):** منظومات RAID تحمي من تلف الأقراص المادية فقط ولكنها لا تحمي من الحذف الخاطئ أو الهجمات التخريبية أو تلف البيانات المنطقي.
-2. **النسخ إلى جهاز أو مسار شبكي مستقل (Separate Device / Remote Share):** يجب نسخ ملفات النسخ الاحتياطي فور إنشائها إلى جهاز تخزين منفصل تماماً أو وحدة تخزين شبكية معزولة (Air-Gapped / Isolated Storage).
-3. **حفظ كلمة مرور التشفير في مكان آمن مغلق (Offline Sealed Passphrase):** يجب توليد `BACKUP_PASSPHRASE` قوية وتدوينها وحفظها في ظرف مغلق ومختوم داخل خزينة الإدارة (Safe Deposit) بعيداً عن ملفات النظام والخوادم.
-4. **اختبار استرجاع شهري دوري (Monthly Restore Drill):** إجراء تجربة استرجاع دورية كل شهر في بيئة معزولة للتأكد من سلامة النسخ وصلاحية كلمة المرور.
+> **ملاحظة:** تتوفر النسخة العربية المطبوعة الكاملة في `docs/OFFLINE_INSTALL_AR.md`.
 
-### أوامر إدارة وفحص النسخ الاحتياطي:
+### أ. المتطلبات الفنية (Requirements):
+- جهاز كمبيوتر مكتبي صغير (Mini PC / Small Server) مزود بمعالج 4-Core وذاكرة 4GB RAM وقرص SSD وجهاز UPS وعنوان IP ثابت.
+- مثبت Node.js LTS منسوخ مسبقاً عبر USB (نفس الإصدار الرئيسي للحزمة، مثل v22.x). لا يلزم وجود مترجم C++ أو Python.
+
+### ب. تجهيز الحزمة على جهاز متصل (Package Preparation):
 ```bash
-# 1. إنشاء نسخة احتياطية مشفرة مشتقة بمفتاح AES-256-GCM والتحقق التلقائي منها
-BACKUP_PASSPHRASE="YOUR_OFFLINE_SECRET" npm run backup
-
-# 2. التحقق الشامل من سلامة وتشفير أي ملف نسخة احتياطية وفحص سجل العمليات التشفيري
-BACKUP_PASSPHRASE="YOUR_OFFLINE_SECRET" npm run backup:verify -- var/backups/backup-20261005120000.db.enc
-
-# 3. اختبار استرجاع تجريبي معزول في دليل مؤقت ومقارنة عدد السجلات دون المساس بقاعدة البيانات الحية
-BACKUP_PASSPHRASE="YOUR_OFFLINE_SECRET" npm run backup:restore-test -- var/backups/backup-20261005120000.db.enc
+npm ci
+npm run check
+npm run package:offline
+npm run verify:package -- release/executive-office-portal-*.tar.gz
 ```
+انسخ ملف الأرشيف وملف `.sha256` إلى وحدة تخزين USB.
+
+### ج. التثبيت على جهاز المكتب (Installation):
+1. التحقق من البصمة الرقمية: `sha256sum -c *.sha256`.
+2. استخراج الحزمة إلى `/opt/executive-portal` (أو `C:\ExecutivePortal` على Windows).
+3. إنشاء حساب مستخدم نظام مخصص بدون صلاحيات جذر (`portal_svc`).
+4. إنشاء مجلدات `DATA_DIR` و `BACKUP_DIR` خارج مجلد التطبيق بصلاحية `700`.
+5. نسخ `.env.example` إلى `.env` وضبط الصلاحيات `chmod 600`.
+
+### د. فحص محرك البيانات والإقلاع الأول (First Start):
+1. تنفيذ فحص المحرك: `node dist-server/verifyNative.js`.
+2. تشغيل أولي يدوي: `node dist-server/server.js`.
+3. التقاط كلمات المرور الأولية وتدوينها في مظاريف مختومة تسلم للمستخدمين.
+4. التأكيد على إجبار تغيير كلمة المرور عند أول تسجيل دخول، وعدم إعادة توليدها في مرات التشغيل اللاحقة.
+
+### هـ. تأمين HTTPS على الشبكة المحلية (HTTPS LAN):
+- استخدام شهادة TLS صادرة من هيئة تصديق داخلية (Internal CA).
+- إنهاء التشفير عبر NGINX أو خادم Node.js الداخلي.
+- إبقاء `COOKIE_SECURE=true` لمنع سرقة الجلسات (الاتصال عبر HTTP لن يحفظ كوكيز الجلسة).
+
+### و. الجدار الناري والشبكة (Firewall & Network):
+- تقييد الاستماع على المنفذ المحلي وفتح منفذ 443 فقط للشبكة الفرعية لمكتب الرئيس.
+- اتصال VPN لرئيس المجلس هو قرار منفصل يتطلب اعتماد إدارة الأمن السيبراني.
+
+### ز. التشغيل كخدمة نظام (Service Management):
+- استخدام ملف خدمة `systemd` في Linux مع ضبط `Restart=on-failure`, `ProtectSystem=strict`, `PrivateTmp=true`.
+- استخدام `NSSM` كخدمة مدارة على نظام Windows.
+
+### ح. النسخ الاحتياطي والاسترجاع (Backups):
+- جدولة تشغيل يومي لأمر النسخ المشفر بكلمة سر قوية (`cron` أو `Task Scheduler`).
+- إجراء اختبار استرجاع شهري دوري في بيئة معزولة للتأكد من سلامة البيانات: `node scripts/backup.js --restore-test <backup_file>`.
+- إبقاء `RESTORE_ENABLED=false` في الأوقات العادية وتفعيله مؤقتاً فقط أثناء الاسترجاع.
+
+### ط. قائمة الفحص بعد التثبيت (Smoke Test Checklist):
+- فحص `/api/health`.
+- تسجيل دخول المستخدمين وإجبار تغيير كلمة المرور.
+- إنشاء مراسلات بملخص وبدون ملخص والتأكد من عدم حدوث أخطاء 500.
+- اعتماد المعاملات من رئيس المجلس وتدقيق سلسلة سجلات الأمان.
+- إعادة تشغيل الخادم والتأكد من بقاء البيانات وعدم ظهور حسابات جديدة.
+- فحص شبكة المتصفح والتأكد من عدم وجود أي طلب خارجي (0 requests to internet).
+
+### ي. التحديث دون اتصال (Offline Updates):
+- بناء حزمة جديدة، أخذ نسخة احتياطية، إيقاف الخدمة، استخراج الحزمة في مجلد جديد، تطبيق التحديثات وإعادة التشغيل.
+
+### ك. استكشاف الأخطاء وإصلاحها (Troubleshooting Table):
+- معالجة مشاكل عدم تطابق معمارية Node، وانشغال المنفذ، وفقدان كوكيز الجلسة عبر HTTP، وأخطاء صلاحيات الملفات.
+
+### ل. مصفوفة القرارات المعلقة لإدارة تكنولوجيا وأمن المعلومات:
+- توثيق قرارات موقع الخادم، وتصاريح الـ VPN، ومصدر شهادات TLS، ومكان تخزين النسخ الاحتياطي الخارجي، والمراجعة الأمنية المستقلة.
 
 ---
 
-## 5. خط الإنتاج والتحقق التلقائي (CI & Quality Gate)
+## 5. خط الإنتاج والتحقق التلقائي (CI Quality Gate)
 
-لضمان سلامة الكود قبل أي نشر:
 ```bash
-# 1. تدقيق الشفرة وفحص TypeScript
-npm run lint
+# 1. فحص الأنواع البرمجية
+npm run typecheck
 
-# 2. تشغيل حزمة الاختبارات الشاملة (7 أجنحة اختبار)
+# 2. تشغيل حزمة الاختبارات الشاملة (15 جناح اختبار)
 npm test
 
-# 3. بناء حزمة الإنتاج
+# 3. بناء خادم الإنتاج والواجهة الأمامية
 npm run build
 ```
-أي فشل في الاختبارات أو فحص الأنواع يوقف عملية النشر تلقائياً.

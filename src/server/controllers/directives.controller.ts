@@ -103,7 +103,11 @@ export class DirectivesController {
   static async addUpdate(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const validated = addDirectiveUpdateSchema.parse(req.body);
-      const created = await directiveRepo.addUpdate(validated as any, req.userContext!);
+      const directive_id = req.params.id || validated.directive_id;
+      const created = await directiveRepo.addUpdate({
+        ...validated,
+        directive_id
+      } as any, req.userContext!);
       res.status(201).json(created);
     } catch (err) {
       next(err);

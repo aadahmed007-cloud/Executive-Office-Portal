@@ -9,8 +9,11 @@ import {
   AlertTriangle,
   LogIn,
   Clock,
-  Sparkles
+  Sparkles,
+  Eye,
+  EyeOff
 } from 'lucide-react';
+import { PasswordField } from '../../ui/components/PasswordField';
 
 export const LoginView: React.FC = () => {
   const { login, throttleSecondsRemaining } = useAuth();
@@ -108,21 +111,15 @@ export const LoginView: React.FC = () => {
             />
           </div>
 
-          <div>
-            <label className="block text-slate-300 font-bold mb-1.5 flex items-center gap-1.5">
-              <KeyRound className="w-3.5 h-3.5 text-slate-400" />
-              <span>كلمة المرور (Password):</span>
-            </label>
-            <input
-              type="password"
-              required
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••••••"
-              className="w-full bg-slate-800/80 border border-slate-700 rounded-xl p-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition font-mono"
-            />
-          </div>
+          <PasswordField
+            label="كلمة المرور (Password):"
+            required
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••••••"
+            className="bg-slate-800/80 border border-slate-700 rounded-xl p-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition font-mono"
+          />
 
           <button
             type="submit"

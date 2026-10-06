@@ -17,9 +17,9 @@ const loginSchema = z.object({
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1).optional(),
-  newPassword: z.string().min(8).optional(),
+  newPassword: z.string().min(1).optional(),
   current_password: z.string().min(1).optional(),
-  new_password: z.string().min(8).optional()
+  new_password: z.string().min(1).optional()
 }).strict();
 
 const reauthSchema = z.object({
@@ -227,9 +227,9 @@ export class AuthController {
       }
 
       // Enforce strength policy
-      const strengthCheck = AuthSecurityService.validatePasswordStrength(effectiveNewPassword, req.user.username);
+      const strengthCheck = AuthSecurityService.validatePasswordStrength(effectiveNewPassword, req.user.username, effectiveCurrentPassword);
       if (!strengthCheck.isValid) {
-        res.status(400).json({ error: strengthCheck.error });
+        res.status(400).json({ error: strengthCheck.error, reason: strengthCheck.reason, code: 'VALIDATION_ERROR' });
         return;
       }
 

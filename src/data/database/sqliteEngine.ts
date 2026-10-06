@@ -27,14 +27,107 @@ import {
   INITIAL_SETTINGS
 } from './seedData.js';
 
+export interface EngineInfo {
+  mode: 'file' | 'memory';
+  isMemory: boolean;
+  dbPath: string;
+  absolutePath: string;
+  journalMode: string;
+  foreignKeys: boolean;
+  schemaVersion: number;
+  fileSizeBytes: number;
+  fileSizeFormatted: string;
+  isFirstStart: boolean;
+  userCount: number;
+}
+
+export function formatStartupBanner(info: EngineInfo): string {
+  const lines: string[] = [];
+  lines.push('======================================================================');
+  lines.push('🏛️  EGYPT NATIONAL POST - CHAIRMAN OFFICE EXECUTIVE PORTAL');
+
+  if (info.isMemory) {
+    lines.push('⚠️  WARNING: Database running in SQLite IN-MEMORY mode (:memory:)!');
+    lines.push('⚠️  ALL DATA WILL BE PERMANENTLY LOST WHEN THE PROCESS EXITS!');
+    lines.push(`📁 Database Path: ${info.absolutePath}`);
+    lines.push(`⚙️  Journal Mode: ${info.journalMode} | Foreign Keys: ${info.foreignKeys ? 'ENABLED (ON)' : 'DISABLED (OFF)'} | Schema Version: ${info.schemaVersion}`);
+    lines.push(`💾 Database Size: ${info.fileSizeFormatted} (In-Memory Buffer)`);
+  } else {
+    lines.push(`💾 Mode: File-Backed Persistent Database`);
+    lines.push(`📁 Database Path: ${info.absolutePath}`);
+    lines.push(`⚙️  Journal Mode: ${info.journalMode} | Foreign Keys: ${info.foreignKeys ? 'ENABLED (ON)' : 'DISABLED (OFF)'} | Schema Version: ${info.schemaVersion}`);
+    lines.push(`📦 Database Size: ${info.fileSizeFormatted}`);
+  }
+
+  if (info.isFirstStart) {
+    lines.push(`🆕 Status: First Start (Clean initialization - Credentials generated)`);
+    lines.push(`🔑 Initial credentials printed above. Keep this console private.`);
+  } else {
+    lines.push(`🔄 Status: Server Restart (Loaded ${info.userCount} existing users from storage)`);
+    lines.push(`🔒 Retaining existing encrypted credentials from database.`);
+  }
+
+  lines.push('======================================================================');
+  return lines.join('\n');
+}
+
 export class SqliteEngine {
   private db: Database.Database | null = null;
   private dbPath: string = '';
+  private isFirstStart: boolean = false;
   private initPromise: Promise<void> | null = null;
   private writeMutex = Promise.resolve();
 
   public getDbPath(): string {
     return this.dbPath;
+  }
+
+  public getEngineInfo(): EngineInfo {
+    const isMemory = this.dbPath === ':memory:';
+    const journalMode = this.query<{ journal_mode: string }>('PRAGMA journal_mode')[0]?.journal_mode?.toUpperCase() || 'UNKNOWN';
+    const foreignKeys = Boolean(this.query<{ foreign_keys: number }>('PRAGMA foreign_keys')[0]?.foreign_keys);
+
+    let schemaVersion = 1;
+    try {
+      const vRows = this.query<{ version: number }>('SELECT MAX(version) as version FROM schema_version');
+      schemaVersion = vRows[0]?.version || 1;
+    } catch {
+      schemaVersion = this.query<{ schema_version: number }>('PRAGMA schema_version')[0]?.schema_version || 1;
+    }
+
+    let fileSizeBytes = 0;
+    if (!isMemory && fs.existsSync(this.dbPath)) {
+      try {
+        fileSizeBytes = fs.statSync(this.dbPath).size;
+      } catch {
+        fileSizeBytes = 0;
+      }
+    }
+
+    let userCount = 0;
+    try {
+      userCount = this.query<{ count: number }>('SELECT count(*) as count FROM users')[0]?.count || 0;
+    } catch {}
+
+    const fileSizeFormatted = isMemory
+      ? '0 KB'
+      : fileSizeBytes > 1024 * 1024
+      ? `${(fileSizeBytes / (1024 * 1024)).toFixed(2)} MB (${fileSizeBytes} bytes)`
+      : `${(fileSizeBytes / 1024).toFixed(1)} KB (${fileSizeBytes} bytes)`;
+
+    return {
+      mode: isMemory ? 'memory' : 'file',
+      isMemory,
+      dbPath: this.dbPath,
+      absolutePath: isMemory ? ':memory:' : path.resolve(this.dbPath),
+      journalMode,
+      foreignKeys,
+      schemaVersion,
+      fileSizeBytes,
+      fileSizeFormatted,
+      isFirstStart: this.isFirstStart,
+      userCount
+    };
   }
 
   public async runWithMutex<T>(fn: () => Promise<T> | T): Promise<T> {
@@ -57,30 +150,36 @@ export class SqliteEngine {
     if (this.initPromise && !customPath) return this.initPromise;
 
     this.initPromise = (async () => {
-      const dataDir = process.env.DATA_DIR || path.join(process.cwd(), 'data');
-      if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
+      const isExplicitMemory = process.env.DATA_DIR === ':memory:' || customPath === ':memory:';
+
+      if (isExplicitMemory) {
+        this.dbPath = ':memory:';
+        this.db = new Database(':memory:');
+      } else {
+        const dataDir = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+        if (!fs.existsSync(dataDir)) {
+          fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
+        }
+        this.dbPath = customPath || path.join(dataDir, 'app.db');
+        this.db = new Database(this.dbPath);
+        try {
+          if (fs.existsSync(this.dbPath)) {
+            fs.chmodSync(this.dbPath, 0o600);
+          }
+        } catch {}
       }
 
-      this.dbPath = customPath || path.join(dataDir, 'app.db');
-      const isNewDb = !fs.existsSync(this.dbPath);
-
-      this.db = new Database(this.dbPath);
-
-      // Secure file permissions (0600: read/write strictly by owner)
-      try {
-        if (fs.existsSync(this.dbPath)) {
-          fs.chmodSync(this.dbPath, 0o600);
-        }
-      } catch {}
-
       // Hardening Pragmas
-      this.db.pragma('journal_mode = WAL');
+      if (!isExplicitMemory) {
+        this.db.pragma('journal_mode = WAL');
+      } else {
+        this.db.pragma('journal_mode = MEMORY');
+      }
       this.db.pragma('foreign_keys = ON');
       this.db.pragma('busy_timeout = 5000');
 
       // Run migrations and provisioning
-      await this.runMigrationsAndSeed(isNewDb);
+      await this.runMigrationsAndSeed();
     })();
 
     return this.initPromise;
@@ -153,7 +252,7 @@ export class SqliteEngine {
     await this.init(customPath);
   }
 
-  private async runMigrationsAndSeed(isNewDb: boolean): Promise<void> {
+  private async runMigrationsAndSeed(isNewDb?: boolean): Promise<void> {
     if (!this.db) return;
 
     // 1. Create schema_version table
@@ -176,6 +275,7 @@ export class SqliteEngine {
     // Seed data only on fresh empty database
     const userCountRows = this.query<{ count: number }>('SELECT count(*) as count FROM users');
     const existingUserCount = userCountRows[0]?.count || 0;
+    this.isFirstStart = (existingUserCount === 0);
 
     if (existingUserCount === 0) {
       this.bootstrapFreshDatabase();

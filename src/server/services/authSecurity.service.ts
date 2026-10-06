@@ -8,12 +8,21 @@ export interface SecurityStatus {
 
 const COMMON_PASSWORDS = new Set([
   '123456789012',
+  '1234567890123',
   'password1234',
+  'password12345',
+  'password123456',
   'admin1234567',
+  'admin12345678',
   'secret123456',
+  'secret1234567',
   'egyptpost123',
   'egyptpost2026',
-  'welcome12345'
+  'welcome12345',
+  'welcome123456',
+  'qwerty123456',
+  '123456abcdef',
+  'iloveegypt123'
 ]);
 
 export class AuthSecurityService {
@@ -111,22 +120,47 @@ export class AuthSecurityService {
    * - Minimum 12 characters
    * - Cannot match username
    * - Cannot be in common weak password list
+   * - Cannot be same as current password
    */
-  public static validatePasswordStrength(password: string, username: string): { isValid: boolean; error?: string } {
+  public static validatePasswordStrength(
+    password: string,
+    username: string,
+    currentPassword?: string
+  ): { isValid: boolean; error?: string; reason?: 'TOO_SHORT' | 'CONTAINS_USERNAME' | 'COMMON_PASSWORD' | 'SAME_AS_CURRENT' } {
     if (!password || typeof password !== 'string') {
       return { isValid: false, error: 'كلمة المرور مطلوبة' };
     }
 
-    if (password.length < 12) {
-      return { isValid: false, error: 'يجب ألا تقل كلمة المرور عن 12 حرفاً ورمزاً (Security Requirement: Min 12 chars)' };
+    if (currentPassword && password === currentPassword) {
+      return {
+        isValid: false,
+        reason: 'SAME_AS_CURRENT',
+        error: 'كلمة المرور الجديدة مطابقة لكلمة المرور الحالية، يرجى اختيار كلمة مرور مختلفة'
+      };
     }
 
-    if (password.toLowerCase().includes(username.toLowerCase())) {
-      return { isValid: false, error: 'لا يمكن أن تحتوي كلمة المرور على اسم المستخدم' };
+    if (password.length < 12) {
+      return {
+        isValid: false,
+        reason: 'TOO_SHORT',
+        error: 'كلمة المرور قصيرة جداً: يجب ألا تقل عن 12 حرفاً ورمزاً'
+      };
+    }
+
+    if (username && password.toLowerCase().includes(username.toLowerCase())) {
+      return {
+        isValid: false,
+        reason: 'CONTAINS_USERNAME',
+        error: 'كلمة المرور تحتوي على اسم المستخدم: لا يمكن أن تحتوي كلمة المرور على اسم المستخدم'
+      };
     }
 
     if (COMMON_PASSWORDS.has(password.toLowerCase())) {
-      return { isValid: false, error: 'كلمة المرور المدخلة شائعة وسهلة التخمين. يرجى اختيار كلمة مرور قوية' };
+      return {
+        isValid: false,
+        reason: 'COMMON_PASSWORD',
+        error: 'كلمة المرور شائعة وسهلة التخمين: يرجى اختيار كلمة مرور قوية وغير متداولة'
+      };
     }
 
     return { isValid: true };

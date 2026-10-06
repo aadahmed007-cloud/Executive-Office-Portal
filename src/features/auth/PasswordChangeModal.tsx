@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
-import { KeyRound, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { KeyRound, ShieldAlert, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import { PasswordField } from '../../ui/components/PasswordField';
 
 export const PasswordChangeModal: React.FC = () => {
   const { changePassword, dismissPasswordChangePrompt } = useAuth();
@@ -61,43 +62,40 @@ export const PasswordChangeModal: React.FC = () => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-3 text-xs">
-          <div>
-            <label className="block font-bold text-slate-700 mb-1">كلمة المرور الحالية (الأولية):</label>
-            <input
-              type="password"
-              required
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              placeholder="أدخل كلمة المرور الحالية"
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
-            />
-          </div>
+          <PasswordField
+            label="كلمة المرور الحالية (الأولية):"
+            required
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            placeholder="أدخل كلمة المرور الحالية"
+            className="bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
+            containerClassName="space-y-1 w-full"
+            labelClassName="block font-bold text-slate-700 mb-1"
+          />
 
-          <div>
-            <label className="block font-bold text-slate-700 mb-1">كلمة المرور الجديدة (12 حرفاً على الأقل):</label>
-            <input
-              type="password"
-              required
-              minLength={12}
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="12 حرفاً أو رقماً أو رمزاً على الأقل"
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
-            />
-          </div>
+          <PasswordField
+            label="كلمة المرور الجديدة (12 حرفاً على الأقل):"
+            required
+            minLength={12}
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="12 حرفاً أو رقماً أو رمزاً على الأقل"
+            className="bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
+            containerClassName="space-y-1 w-full"
+            labelClassName="block font-bold text-slate-700 mb-1"
+          />
 
-          <div>
-            <label className="block font-bold text-slate-700 mb-1">تأكيد كلمة المرور الجديدة:</label>
-            <input
-              type="password"
-              required
-              minLength={12}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="إعادة كتابة كلمة المرور الجديدة"
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
-            />
-          </div>
+          <PasswordField
+            label="تأكيد كلمة المرور الجديدة:"
+            required
+            minLength={12}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="إعادة كتابة كلمة المرور الجديدة"
+            className="bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
+            containerClassName="space-y-1 w-full"
+            labelClassName="block font-bold text-slate-700 mb-1"
+          />
 
           <div className="pt-2 flex items-center justify-end gap-2">
             <button

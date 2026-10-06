@@ -177,7 +177,11 @@ export class CorrespondenceController {
   static async addRouting(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const validated = addRoutingSchema.parse(req.body);
-      const created = await correspondenceRepo.addRouting(validated as any, req.userContext!);
+      const correspondence_id = req.params.id || validated.correspondence_id;
+      const created = await correspondenceRepo.addRouting({
+        ...validated,
+        correspondence_id
+      } as any, req.userContext!);
       res.status(201).json(created);
     } catch (err) {
       next(err);
@@ -196,7 +200,12 @@ export class CorrespondenceController {
   static async addAttachment(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const validated = addAttachmentSchema.parse(req.body);
-      const created = await correspondenceRepo.addAttachment(validated as any, req.userContext!);
+      const correspondence_id = req.params.id || validated.correspondence_id;
+      const created = await correspondenceRepo.addAttachment({
+        ...validated,
+        correspondence_id,
+        entity_id: correspondence_id
+      } as any, req.userContext!);
       res.status(201).json(created);
     } catch (err) {
       next(err);

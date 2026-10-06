@@ -70,7 +70,11 @@ export class ContactsController {
   static async addInteraction(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const validated = addInteractionSchema.parse(req.body);
-      const created = await contactRepo.addInteraction(validated as any, req.userContext!);
+      const contact_id = req.params.id || validated.contact_id;
+      const created = await contactRepo.addInteraction({
+        ...validated,
+        contact_id
+      } as any, req.userContext!);
       res.status(201).json(created);
     } catch (err) {
       next(err);
