@@ -9,6 +9,7 @@
  * - Standalone CLI commands for verify (--verify <file>) and restore testing (--restore-test <file>).
  */
 
+import 'dotenv/config';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -18,6 +19,28 @@ import { sqliteEngine } from '../src/data/database/sqliteEngine.js';
 import { verifyAuditLogIntegrity, AuditCheckpoint } from '../src/domain/security/cryptoUtils.js';
 
 export const BACKUP_MAGIC_HEADER = Buffer.from('ENPA_BK_GCM_V1\0\0'); // 16 bytes
+
+export function resolvePassphrase(explicit?: string): string | undefined {
+  if (explicit) return explicit;
+  if (process.env.BACKUP_PASSPHRASE) return process.env.BACKUP_PASSPHRASE;
+  if (process.env.BACKUP_PASSPHRASE_FILE) {
+    const filePath = path.resolve(process.env.BACKUP_PASSPHRASE_FILE);
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`ملف كلمة مرور النسخ الاحتياطي غير موجود: ${filePath}`);
+    }
+    // Check permissions on POSIX systems (must be 0600 or 0400, no group/other read)
+    if (process.platform !== 'win32') {
+      const stat = fs.statSync(filePath);
+      const mode = stat.mode & 0o777;
+      if ((mode & 0o077) !== 0) {
+        throw new Error(`خطأ أمني: أذونات ملف كلمة المرور ${filePath} غير آمنة (${mode.toString(8)}). يجب أن تكون 0600 أو 0400 (للمالك فقط).`);
+      }
+    }
+    return fs.readFileSync(filePath, 'utf8').trim();
+  }
+  return undefined;
+}
+
 
 export interface BackupResult {
   success: boolean;
@@ -168,7 +191,7 @@ export async function createEncryptedBackup(options?: {
 }): Promise<BackupResult> {
   const dataDir = options?.dataDir || process.env.DATA_DIR || path.join(process.cwd(), 'var', 'data');
   const backupDir = options?.backupDir || process.env.BACKUP_DIR || path.join(process.cwd(), 'var', 'backups');
-  const passphrase = options?.passphrase || process.env.BACKUP_PASSPHRASE;
+  const passphrase = resolvePassphrase(options?.passphrase);
   const allowPlaintext = options?.allowPlaintext || process.env.BACKUP_ALLOW_PLAINTEXT === 'true';
 
   if (!fs.existsSync(backupDir)) {
@@ -178,7 +201,7 @@ export async function createEncryptedBackup(options?: {
   // Ensure passphrase is provided unless explicitly allowed
   if (!passphrase && !allowPlaintext) {
     throw new Error(
-      'خطأ أمني: كلمة مرور التشفير (BACKUP_PASSPHRASE) غير محددة. يمنع النظام إنشاء نسخ احتياطية غير مشفرة ما لم يتم تفعيل BACKUP_ALLOW_PLAINTEXT=true صراحة.'
+      'خطأ أمني: كلمة مرور التشفير (BACKUP_PASSPHRASE أو BACKUP_PASSPHRASE_FILE) غير محددة. يمنع النظام إنشاء نسخ احتياطية غير مشفرة ما لم يتم تفعيل BACKUP_ALLOW_PLAINTEXT=true صراحة.'
     );
   }
 
@@ -256,6 +279,7 @@ export async function createEncryptedBackup(options?: {
 }
 
 export async function restoreTest(backupFilePath: string, passphrase?: string): Promise<{ success: boolean; tempDir: string; rowCounts: Record<string, number> }> {
+  const resolvedPassphrase = resolvePassphrase(passphrase);
   const tempRestoreDir = fs.mkdtempSync(path.join(os.tmpdir(), 'restore-test-'));
   const tempRestoredDb = path.join(tempRestoreDir, 'app.db');
 
@@ -264,8 +288,8 @@ export async function restoreTest(backupFilePath: string, passphrase?: string): 
 
   let plainBuffer: Buffer;
   if (isEncrypted) {
-    if (!passphrase) throw new Error('كلمة المرور مطلوبة لاختبار الاسترجاع');
-    plainBuffer = decryptBuffer(fileContent, passphrase);
+    if (!resolvedPassphrase) throw new Error('كلمة المرور مطلوبة لاختبار الاسترجاع');
+    plainBuffer = decryptBuffer(fileContent, resolvedPassphrase);
   } else {
     plainBuffer = fileContent;
   }
@@ -299,7 +323,7 @@ export async function restoreTest(backupFilePath: string, passphrase?: string): 
 // CLI Execution Handler
 async function main() {
   const args = process.argv.slice(2);
-  const passphrase = process.env.BACKUP_PASSPHRASE;
+  const passphrase = resolvePassphrase();
 
   if (args.includes('--verify')) {
     const fileIdx = args.indexOf('--verify') + 1;
@@ -345,9 +369,10 @@ async function main() {
   console.log(`✅ تم إنشاء والتحقق من النسخة الاحتياطية بنجاح: ${result.backupFilePath} (مشفرة: ${result.isEncrypted})`);
 }
 
-if (process.argv[1] && process.argv[1].endsWith('backup.ts')) {
+if (process.argv[1] && (process.argv[1].endsWith('backup.ts') || process.argv[1].endsWith('backup.js') || process.argv[1].endsWith('backup'))) {
   main().catch((err) => {
     console.error('❌ فشلت عملية النسخ الاحتياطي:', err.message);
     process.exit(1);
   });
 }
+

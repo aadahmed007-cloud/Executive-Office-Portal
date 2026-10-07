@@ -33,12 +33,14 @@ export class SessionService {
     const rawToken = crypto.randomBytes(32).toString('hex'); // 256-bit random token
     const tokenHash = this.hashToken(rawToken);
 
-    // Read timeout configurations (default 30 min idle, 12 hours absolute)
+    // Read timeout configurations (default 30 min idle or env override, 12 hours absolute)
     const settingsRows = sqliteEngine.query<{ session_timeout_minutes: number }>(
       'SELECT session_timeout_minutes FROM settings LIMIT 1'
     );
-    const idleMinutes = settingsRows[0]?.session_timeout_minutes || 30;
+    const envIdle = process.env.SESSION_IDLE_MINUTES ? parseInt(process.env.SESSION_IDLE_MINUTES, 10) : undefined;
+    const idleMinutes = envIdle || settingsRows[0]?.session_timeout_minutes || 30;
     const absoluteHours = parseInt(process.env.SESSION_ABSOLUTE_HOURS || '12', 10);
+
 
     const now = new Date();
     const expiresAt = new Date(now.getTime() + absoluteHours * 60 * 60 * 1000);
@@ -96,8 +98,10 @@ export class SessionService {
     const settingsRows = sqliteEngine.query<{ session_timeout_minutes: number }>(
       'SELECT session_timeout_minutes FROM settings LIMIT 1'
     );
-    const idleMinutes = settingsRows[0]?.session_timeout_minutes || 30;
+    const envIdle = process.env.SESSION_IDLE_MINUTES ? parseInt(process.env.SESSION_IDLE_MINUTES, 10) : undefined;
+    const idleMinutes = envIdle || settingsRows[0]?.session_timeout_minutes || 30;
     const lastActive = new Date(session.last_active_at);
+
     const idleExpiry = new Date(lastActive.getTime() + idleMinutes * 60 * 1000);
 
     if (now > idleExpiry) {

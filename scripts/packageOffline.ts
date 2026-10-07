@@ -87,9 +87,6 @@ async function buildOfflinePackage(): Promise<void> {
   // Copy dist-server (skip sourcemaps)
   copyDirRecursive(path.join(rootDir, 'dist-server'), path.join(stageDir, 'dist-server'), (name) => !name.endsWith('.map'));
 
-  // Copy scripts (backup, verifyNative, verifyPackage)
-  copyDirRecursive(path.join(rootDir, 'scripts'), path.join(stageDir, 'scripts'), (name) => !name.endsWith('.map'));
-
   // Copy docs
   if (fs.existsSync(path.join(rootDir, 'docs'))) {
     copyDirRecursive(path.join(rootDir, 'docs'), path.join(stageDir, 'docs'));
@@ -105,6 +102,9 @@ async function buildOfflinePackage(): Promise<void> {
   if (fs.existsSync(path.join(rootDir, 'PRODUCTION_DEPLOYMENT.md'))) {
     fs.copyFileSync(path.join(rootDir, 'PRODUCTION_DEPLOYMENT.md'), path.join(stageDir, 'PRODUCTION_DEPLOYMENT.md'));
   }
+  if (fs.existsSync(path.join(rootDir, 'README.md'))) {
+    fs.copyFileSync(path.join(rootDir, 'README.md'), path.join(stageDir, 'README.md'));
+  }
 
   // 4. Install production dependencies with --omit=dev --ignore-scripts in stage directory
   console.log('📥 جاري تثبيت حزم الإنتاج الصافية (npm ci --omit=dev --ignore-scripts)...');
@@ -118,11 +118,15 @@ async function buildOfflinePackage(): Promise<void> {
   }
 
   // 5. Security audit & exclusion verification
-  console.log('🔒 فحص خلو الحزمة من أي ملفات حساسة أو بيانات تشغيل...');
+  console.log('🔒 فحص خلو الحزمة من أي ملفات حساسة أو بيانات تشغيل أو أدوات تطوير...');
   const allStaged = getAllFiles(stageDir);
   for (const f of allStaged) {
     const rel = path.relative(stageDir, f);
-    if (rel === '.env' || rel.startsWith('.env.') && rel !== '.env.example') {
+    if (!rel.startsWith('node_modules/') && !rel.startsWith('node_modules\\') && (rel.endsWith('.ts') || rel.endsWith('.tsx'))) {
+      throw new Error(`Security Violation: Found TypeScript source file in production package: ${rel}`);
+    }
+
+    if (rel === '.env' || (rel.startsWith('.env.') && rel !== '.env.example')) {
       throw new Error(`Security Violation: Found prohibited environment file: ${rel}`);
     }
     if (rel.endsWith('.db') || rel.endsWith('.db-wal') || rel.endsWith('.db-shm')) {
@@ -138,6 +142,19 @@ async function buildOfflinePackage(): Promise<void> {
       throw new Error(`Security Violation: Found source map file: ${rel}`);
     }
   }
+
+  // Check node_modules/.bin for dev tools
+  const binDir = path.join(stageDir, 'node_modules', '.bin');
+  if (fs.existsSync(binDir)) {
+    const binFiles = fs.readdirSync(binDir);
+    const prohibitedBins = ['tsx', 'vite', 'esbuild', 'tsc', 'typescript', 'vitest', 'supertest'];
+    for (const b of binFiles) {
+      if (prohibitedBins.includes(b)) {
+        throw new Error(`Security Violation: Dev tool binary found in production node_modules/.bin: ${b}`);
+      }
+    }
+  }
+
 
   // 6. Generate MANIFEST.json with SHA-256 for every file
   console.log('📝 إنشاء سجل المطابقة والنزاهة الرقمية MANIFEST.json...');

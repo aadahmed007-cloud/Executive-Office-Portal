@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -19,30 +20,10 @@ export async function startServer() {
     process.env.PREVIEW_MODE = process.env.PREVIEW_MODE || 'true';
   }
 
-  // Validate or automatically initialize cryptographic secrets
-  if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET === 'REPLACE_WITH_STRONG_RANDOM_64_CHAR_SECRET') {
-    if (isProd) {
-      console.error('❌ FATAL: Critical environment variable SESSION_SECRET is missing or has placeholder value.');
-      process.exit(1);
-    } else {
-      process.env.SESSION_SECRET = (await import('crypto')).randomBytes(32).toString('hex');
-      console.log('ℹ️  Development/Preview mode: auto-generated volatile SESSION_SECRET.');
-    }
-  }
-
-  if (!process.env.BACKUP_PASSPHRASE || process.env.BACKUP_PASSPHRASE === 'REPLACE_WITH_STRONG_OFFLINE_PASSPHRASE') {
-    if (isProd) {
-      console.error('❌ FATAL: Critical environment variable BACKUP_PASSPHRASE is missing or has placeholder value.');
-      process.exit(1);
-    } else {
-      process.env.BACKUP_PASSPHRASE = (await import('crypto')).randomBytes(24).toString('hex');
-      console.log('ℹ️  Development/Preview mode: auto-generated volatile BACKUP_PASSPHRASE.');
-    }
-  }
-
   // 1. Initialize local SQLite engine & seed default users
   await sqliteEngine.init();
   const engineInfo = sqliteEngine.getEngineInfo();
+
 
   console.log('\n' + formatStartupBanner(engineInfo) + '\n');
 

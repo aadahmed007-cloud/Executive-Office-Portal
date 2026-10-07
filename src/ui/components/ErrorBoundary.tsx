@@ -1,5 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { AlertTriangle, RotateCcw, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, RotateCcw, ShieldAlert, Copy, Check } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
@@ -8,20 +8,33 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  errorInfo: ErrorInfo | null;
+  copied: boolean;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
+  private copyTimeout: NodeJS.Timeout | null = null;
+
   public state: State = {
     hasError: false,
-    error: null
+    error: null,
+    errorInfo: null,
+    copied: false
   };
 
-  public static getDerivedStateFromError(error: Error): State {
+  public static getDerivedStateFromError(error: Error): Partial<State> {
     return { hasError: true, error };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Uncaught error caught by Executive ErrorBoundary:', error, errorInfo);
+    this.setState({ errorInfo });
+  }
+
+  public componentWillUnmount() {
+    if (this.copyTimeout) {
+      clearTimeout(this.copyTimeout);
+    }
   }
 
   private handleReload = () => {
@@ -29,7 +42,45 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   private handleResetState = () => {
-    this.setState({ hasError: false, error: null });
+    this.setState({ hasError: false, error: null, errorInfo: null, copied: false });
+  };
+
+  private handleCopyDiagnostic = async () => {
+    const { error, errorInfo } = this.state;
+    const diagnosticReport = [
+      `=== تقرير خطأ النظام التنفيذي (Diagnostic Error Report) ===`,
+      `التاريخ والوقت: ${new Date().toISOString()}`,
+      `المسار الحالي: ${typeof window !== 'undefined' ? window.location.pathname : 'N/A'}`,
+      `الخطأ (Message): ${error?.message || 'Unknown Error'}`,
+      `نوع الخطأ (Name): ${error?.name || 'Error'}`,
+      error?.stack ? `\n[Call Stack]:\n${error.stack}` : '',
+      errorInfo?.componentStack ? `\n[Component Stack]:\n${errorInfo.componentStack}` : ''
+    ].filter(Boolean).join('\n');
+
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(diagnosticReport);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = diagnosticReport;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        textArea.remove();
+      }
+
+      this.setState({ copied: true });
+      if (this.copyTimeout) clearTimeout(this.copyTimeout);
+      this.copyTimeout = setTimeout(() => {
+        this.setState({ copied: false });
+      }, 3000);
+    } catch (err) {
+      console.error('Failed to copy error report to clipboard:', err);
+    }
   };
 
   public render() {
@@ -51,8 +102,32 @@ export class ErrorBoundary extends Component<Props, State> {
             </p>
 
             {this.state.error && (
-              <div className="text-[11px] font-mono text-slate-400 bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-left truncate">
-                {this.state.error.message}
+              <div className="space-y-2">
+                <div className="text-[11px] font-mono text-slate-400 bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-left truncate">
+                  {this.state.error.message}
+                </div>
+                <button
+                  type="button"
+                  onClick={this.handleCopyDiagnostic}
+                  className={`w-full py-2 px-3 rounded-lg text-[11px] font-medium transition flex items-center justify-center gap-1.5 cursor-pointer border ${
+                    this.state.copied
+                      ? 'bg-emerald-950/80 border-emerald-600/60 text-emerald-300'
+                      : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700 text-slate-300 hover:text-slate-100'
+                  }`}
+                  title="نسخ التقرير التشخيصي للدعم الفني"
+                >
+                  {this.state.copied ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>تم نسخ التفاصيل الفنية للحافظة بنجاح</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5 text-slate-400" />
+                      <span>نسخ التفاصيل الفنية للدعم الداخلي</span>
+                    </>
+                  )}
+                </button>
               </div>
             )}
 
@@ -79,3 +154,4 @@ export class ErrorBoundary extends Component<Props, State> {
     return this.props.children;
   }
 }
+

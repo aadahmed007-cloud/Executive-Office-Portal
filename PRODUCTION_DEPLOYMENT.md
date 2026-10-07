@@ -51,22 +51,24 @@
 NODE_ENV=production
 PORT=3000
 
-# أمان الجلسات وتشفير النسخ الاحتياطي
-SESSION_SECRET=REPLACE_WITH_STRONG_RANDOM_64_HEX_STRING
-BACKUP_PASSPHRASE=REPLACE_WITH_STRONG_OFFLINE_PASSPHRASE
+# أمان تشفير النسخ الاحتياطي (AES-256-GCM مع اشتقاق scrypt)
+BACKUP_PASSPHRASE=""
+BACKUP_PASSPHRASE_FILE="/etc/executive_portal/backup.secret"
+BACKUP_RETENTION=7
+BACKUP_ALLOW_PLAINTEXT=false
 
 # مسارات البيانات المنفصلة خارج مجلد التطبيق البرمجي
 DATA_DIR=/var/lib/executive_portal/data
-ATTACHMENTS_DIR=/var/lib/executive_portal/attachments
 BACKUP_DIR=/var/backups/executive_portal
 
 # الضوابط الأمنية
 COOKIE_SECURE=true
 TRUST_PROXY=true
 ALLOWED_ORIGINS=https://portal.local,https://192.168.10.50
-SESSION_IDLE_MINUTES=15
-SESSION_ABSOLUTE_HOURS=8
+SESSION_IDLE_MINUTES=30
+SESSION_ABSOLUTE_HOURS=12
 RESTORE_ENABLED=false
+
 ```
 
 ---
@@ -101,7 +103,7 @@ PRAGMA cache_size = -64000; -- 64MB Cache
 npm ci
 npm run check
 npm run package:offline
-npm run verify:package -- release/executive-office-portal-*.tar.gz
+node dist-server/verifyPackage.js release/executive-office-portal-*.tar.gz
 ```
 انسخ ملف الأرشيف وملف `.sha256` إلى وحدة تخزين USB.
 
@@ -133,8 +135,9 @@ npm run verify:package -- release/executive-office-portal-*.tar.gz
 
 ### ح. النسخ الاحتياطي والاسترجاع (Backups):
 - جدولة تشغيل يومي لأمر النسخ المشفر بكلمة سر قوية (`cron` أو `Task Scheduler`).
-- إجراء اختبار استرجاع شهري دوري في بيئة معزولة للتأكد من سلامة البيانات: `node scripts/backup.js --restore-test <backup_file>`.
+- إجراء اختبار استرجاع شهري دوري في بيئة معزولة للتأكد من سلامة البيانات: `node dist-server/backup.js --restore-test <backup_file>`.
 - إبقاء `RESTORE_ENABLED=false` في الأوقات العادية وتفعيله مؤقتاً فقط أثناء الاسترجاع.
+
 
 ### ط. قائمة الفحص بعد التثبيت (Smoke Test Checklist):
 - فحص `/api/health`.

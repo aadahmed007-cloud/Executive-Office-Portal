@@ -72,4 +72,21 @@ describe('.gitignore Source Code Safety Guard (Item A.3)', () => {
       `FATAL: .gitignore is swallowing the following source files or directories: ${ignoredSourceFiles.join(', ')}`
     ).toEqual([]);
   });
+
+  it('ensures .gitignore ignores build output and test sandbox directories (/dist-server/, /release/, /.test_offline_sandbox/)', () => {
+    const gitignorePath = path.join(root, '.gitignore');
+    const gitignoreContent = fs.readFileSync(gitignorePath, 'utf-8');
+    const ig = ignore().add(gitignoreContent);
+
+    const artifactPaths = [
+      'dist/index.html',
+      'dist-server/server.js',
+      'release/package.tar.gz',
+      '.test_offline_sandbox/temp.txt'
+    ];
+
+    for (const p of artifactPaths) {
+      expect(ig.ignores(p), `Expected .gitignore to ignore artifact path "${p}"`).toBe(true);
+    }
+  });
 });

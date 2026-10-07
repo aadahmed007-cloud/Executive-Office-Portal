@@ -3,7 +3,11 @@ node_modules/
 
 # Production builds & coverage (anchored to root)
 /dist/
+/dist-server/
 /dist-temp/
+/release/
+/.test_offline_sandbox/
+/.test_smoke_pkg*/
 /coverage/
 /build/
 
