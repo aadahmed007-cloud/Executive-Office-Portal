@@ -323,53 +323,63 @@ schtasks /create /tn "ExecutivePortal_MonthlyRestoreTest" `
 ```
 
 ### 4. خطوات الاسترجاع اليدوي الدقيق لقاعدة البيانات عند الطوارئ (Manual Disaster Recovery Procedure):
-في حال حدوث تلف في الخادم أو الحاجة للرجوع إلى نسخة احتياطية سابقة، يتم تنفيذ الخطوات اليدوية التالية بالترتيب الدقيق:
-1. **إيقاف الخدمة فوراً لمنع أي عمليات كتابة:**
+في حال حدوث تلف في ملف قاعدة البيانات أو الرغبة في الرجوع إلى نسخة احتياطية سابقة، يتم تنفيذ الخطوات التالية بالترتيب الدقيق، وهي مصممة لتكون قابلة للنسخ واللصق المباشر:
+
+1. **إيقاف خدمة التطبيق فوراً لمنع أي عمليات كتابة أثناء الاسترجاع:**
    ```bash
    sudo systemctl stop executive-portal
-   # على Windows: nssm stop ExecutivePortalService
+   # على بيئة Windows:
+   # nssm stop ExecutivePortalService
    ```
-2. **الاحتفاظ بالنسخة الحالية كإجراء أمان احترازي:**
+
+2. **نقل ملفات قاعدة البيانات المتضررة وملفات السجلات الجانبية (WAL/SHM) جانباً دون حذفها:**
    ```bash
-   sudo cp /var/lib/executive_portal/data/app.db /var/lib/executive_portal/data/app.db.bak.$(date +%Y%m%d%H%M)
+   # إنشاء مجلد عزل آمن ونقل كافة الملفات السابقة للاحتفاظ بها كإجراء احترازي
+   sudo mkdir -p /var/lib/executive_portal/data/damaged_$(date +%Y%m%d%H%M%S)
+   sudo mv /var/lib/executive_portal/data/app.db* /var/lib/executive_portal/data/damaged_$(date +%Y%m%d%H%M%S)/ 2>/dev/null || true
+   # على Windows:
+   # move C:\ExecutivePortal\data\app.db* C:\ExecutivePortal\data\damaged_archive\
    ```
-3. **فك التشفير والتحقق من سلامة النسخة الاحتياطية المستهدفة في بيئة معزولة:**
+
+3. **فك تشفير النسخة الاحتياطية المستهدفة والتحقق منها إلى مسار جديد مستقل (NEW path):**
    ```bash
+   # يمنع النظام فك التشفير مباشرة فوق مسار قاعدة البيانات الحية، ويشترط مساراً جديداً غير موجود مسبقاً
    cd /opt/executive-portal
-   BACKUP_PASSPHRASE_FILE="/etc/executive_portal/backup.secret" node dist-server/backup.js --restore-test /var/backups/executive_portal/backup-YYYYMMDDHHMMSS.db.enc
+   sudo -u portal_svc BACKUP_PASSPHRASE_FILE="/etc/executive_portal/backup.secret" node dist-server/backup.js --decrypt /var/backups/executive_portal/backup-20261007.db.enc --out /tmp/restored_app.db
+   # أو باستخدام الاسم المستعار للأمر:
+   # npm run backup:decrypt -- /var/backups/executive_portal/backup-20261007.db.enc --out /tmp/restored_app.db
    ```
-4. **استبدال ملف قاعدة البيانات `app.db` بالملف المسترجع:**
+   *يقوم الأمر آلياً بفحص سلامة SQLite (PRAGMA integrity_check) والمفاتيح الأجنبية وسلسلة سجل التدقيق التشفيرية، ويحذف الملف فوراً في حال فشل أي فحص.*
+
+4. **نسخ ملف قاعدة البيانات المفحوص إلى مجلد البيانات وتعيين المالك والصلاحيات الصارمة (0600):**
    ```bash
-   # فك التشفير ووضع الملف مباشرة في مسار البيانات
-   # (أو استخدام النسخة الناتجة بعد التحقق)
    sudo cp /tmp/restored_app.db /var/lib/executive_portal/data/app.db
-   ```
-5. **حذف ملفات التسجيل المسبق القديمة (WAL/SHM) لمنع التعارض:**
-   ```bash
-   sudo rm -f /var/lib/executive_portal/data/app.db-wal /var/lib/executive_portal/data/app.db-shm
-   ```
-6. **ضبط الصلاحيات الصارمة (0600) لحساب الخدمة:**
-   ```bash
    sudo chown portal_svc:portal_svc /var/lib/executive_portal/data/app.db
    sudo chmod 0600 /var/lib/executive_portal/data/app.db
+   rm -f /tmp/restored_app.db
    ```
-7. **إعادة تشغيل الخدمة والتأكد من حالتها:**
+
+5. **إعادة تشغيل خدمة التطبيق والتأكد من استقرارها:**
    ```bash
    sudo systemctl start executive-portal
    sudo systemctl status executive-portal
    ```
-8. **التحقق من سلامة سلسلة سجل التدقيق (Audit Chain Integrity):**
+
+6. **فحص نقطة الجاهزية التشغيلية والصحية:**
    ```bash
-   # التأكد من عدم وجود أي انقطاع في التشفير أو تسلسل السجلات بعد الاسترجاع
-   cd /opt/executive-portal
-   BACKUP_PASSPHRASE_FILE="/etc/executive_portal/backup.secret" node dist-server/backup.js --verify /var/backups/executive_portal/backup-YYYYMMDDHHMMSS.db.enc
-   ```
-9. **إجراء اختبار الجاهزية التشغيلية (Smoke Test):**
-   ```bash
-   # التحقق من استجابة خادم التطبيق بنجاح
    curl -k -f https://127.0.0.1:3000/api/health
-   # فتح المتصفح وتسجيل الدخول والتحقق من سلامة البيانات المسترجعة
+   # النتيجة المتوقعة: {"status":"ok","database":"connected"}
    ```
+
+7. **التحقق من سلامة سلسلة سجل التدقيق عبر واجهة النظام البرمجية:**
+   ```bash
+   # استدعاء واجهة التحقق التشفيرية من سلسلة سجلات الرقابة
+   curl -k -s https://127.0.0.1:3000/api/audit/verify
+   ```
+
+8. **تنفيذ قائمة الفحص والتحقق بعد التثبيت (القسم ط):**
+   - تسجيل الدخول بحساب مسؤول النظام والتأكد من سلامة كافة البيانات المسترجعة (المراسلات، التوجيهات، الاجتماعات).
+   - تجربة إضافة قيد تدقيق جديد والتحقق من ارتباطه بالسلسلة بنجاح.
 
 ---
 
@@ -424,13 +434,15 @@ sudo systemctl status executive-portal
 
 ## القسم ل: قائمة التحقق الإلزامية قبل الإطلاق الحي الفعلي ومصفوفة القرارات
 
+> ⚠️ **إقرار إلزامي:** **لم يخضع هذا النظام بعد لمراجعة أمنية واختبار اختراق مستقل (Independent Penetration Testing / Third-Party Security Audit).** البنود الواردة أدناه إلزامية وحتمية للحصول على الاعتماد التشغيلي ولا يجوز تجاوز أي منها قبل الانتقال للتشغيل الميداني الفعلي.
+
 ### 1. قائمة التحقق الإلزامية قبل الإطلاق الحي (Before Go-Live Mandatory Checklist):
-- [ ] **1. المراجعة الأمنية المستقلة (Independent Security Review Done):** إتمام اختبار الاختراق والتدقيق الأمني المستقل للنظام وخلوه من الثغرات البرمجية والتكوينية.
-- [ ] **2. الاعتماد الأمني والمؤسسي (IT/Security Sign-off Done):** الحصول على المصادقة الرسمية المكتوبة من قطاع تكنولوجيا وأمن المعلومات بالهيئة.
-- [ ] **3. اختبار النظام على الجهاز الحقيقي (Windows/Linux Steps Tested on Real Machine):** تجربة وتنفيذ خطوات التثبيت والتشغيل المذكورة في هذا الدليل كاملة على الجهاز الفعلي المخصص للإنتاج (Linux أو Windows Server) والتأكد من توافق البيئة.
-- [ ] **4. تمرين استرجاع النسخة الاحتياطية لمرة واحدة (Backup Restore Drill Done Once):** تنفيذ تمرين استرجاع يدوي وتجريبي حقيقي لمرة واحدة على الأقل لقاعدة البيانات والتحقق التام من سلامة سلسلة سجل التدقيق والبيانات.
-- [ ] **5. تسليم بيانات الدخول الأولية (Credentials Handover Done):** تسليم بيانات الدخول السرية للمسؤولين في مظاريف مغلقة ومختومة مع فرض تغيير كلمات المرور الإلزامية عند أول تسجيل دخول.
-- [ ] **6. تثبيت شهادات الاتصال الآمن على كلا الجهازين (HTTPS Certificate Installed on Both Devices):** تثبيت شهادة HTTPS/TLS المعتمدة على كل من جهاز الخادم وجهاز العمل المكتبي لضمان التشفير والتشغيل الآمن لملفات تعريف الارتباط.
+- [ ] **1. إتمام المراجعة الأمنية المستقلة (Independent Security Review Completed):** إتمام اختبار الاختراق والتدقيق الأمني المستقل من جهة أمنية سيبرانية خارجية معتمدة وخلو النظام من أي ثغرات برمجية أو تكوينية حرجة. *(مع الإقرار الصريح بأن النظام لم يخضع لمثل هذه المراجعة حتى تاريخ هذا الإصدار)*.
+- [ ] **2. الموافقة والاعتماد المكتوب من إدارة أمن المعلومات (Written Approval from Information Security):** الحصول على تصريح ومحضر موافقة كتابي ورسمي موقع من الإدارة العامة لأمن المعلومات بقطاع تكنولوجيا المعلومات بالهيئة القومية للبريد.
+- [ ] **3. تسليم بيانات الدخول وتأكيد تغيير كلمة المرور عند أول تسجيل (Credentials Handover & First-Login Password Change Confirmed):** تسليم كلمات المرور الأولية المؤقتة لكل مستخدم (رئيس مجلس الإدارة، مدير المكتب، السكرتارية التنفيذية) يداً بيد داخل مظروف ورقي سري مغلق ومختوم رسميّاً، مع التحقق والتأكيد الإلزامي على إتمام خطوة تغيير كلمة المرور من قِبل كل مستخدم فور أول تسجيل دخول للنظام.
+- [ ] **4. إتمام تمرين استرجاع النسخة الاحتياطية بإجراء فك التشفير الجديد (Backup Restore Drill Completed with --decrypt Procedure):** تنفيذ تمرين استرجاع عملي كامل لقاعدة البيانات في بيئة معزولة باستخدام أمر فك التشفير المعتمد الجديد (`node dist-server/backup.js --decrypt <backup.db.enc> --out <new-path>`) والتحقق التام من سلامة البيانات وسلسلة سجل التدقيق.
+- [ ] **5. تثبيت الشهادة الرقمية على جهازي الرئيس والسكرتارية (HTTPS Certificate Installed on Chairman's & Secretary's Devices):** تثبيت شهادة HTTPS/TLS المعتمدة على جهاز السيد رئيس مجلس الإدارة وجهاز السكرتارية التنفيذية لضمان عمل الجلسات المشفرة ومنع تحذيرات الأمان في المتصفح.
+- [ ] **6. تعيين مسؤول مسمى لتمارين الاسترجاع الشهرية (Named Owner for Monthly Restore Drills):** تكليف مسؤول محدد بالاسم والصفة الوظيفية من فريق التشغيل والدعم الفني يكون مسؤولاً بصورة دورية عن تنفيذ ومتابعة تمرين الاسترجاع والتحقق الشهري المجدول وتوثيق نتائجه في سجل المتابعة.
 
 ### 2. مصفوفة القرارات التشغيلية المعلقة:
 - [ ] **1. الموقع المادي للخادم:** تأمين الخادم داخل خزانة مقفلة في مكتب الرئيس.

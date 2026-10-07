@@ -137,8 +137,8 @@ node dist-server/verifyPackage.js release/executive-office-portal-*.tar.gz
 - **الفحص الدوري:** إجراء اختبار استرجاع شهري دوري في بيئة معزولة للتأكد من سلامة البيانات: `node dist-server/backup.js --restore-test <backup_file>`.
 - **خطوات الاسترجاع اليدوي عند الطوارئ (Manual Disaster Recovery Procedure):**
   1. إيقاف خدمة التطبيق فوراً لمنع أي كتابة (`systemctl stop executive-portal`).
-  2. الاحتفاظ بالنسخة الحالية من ملف `app.db` كإجراء وقائي احترازي.
-  3. فك تشفير وفحص سلامة النسخة المراد استرجاعها في بيئة مؤقتة معزولة (`node dist-server/backup.js --restore-test <backup_file>`).
+  2. الاحتفاظ بالنسخة الحالية من ملف `app.db` كإجراء وقائي احترازي ونقلها جانباً.
+  3. فك تشفير وفحص سلامة النسخة المراد استرجاعها إلى مسار جديد مستقل (`node dist-server/backup.js --decrypt <backup_file> --out /tmp/restored_app.db`).
   4. استبدال ملف `app.db` بالملف المسترجع وضبط الصلاحيات الصارمة (0600).
   5. حذف ملفات `app.db-wal` و `app.db-shm` السابقة لضمان عدم التعارض.
   6. إعادة تشغيل الخدمة (`systemctl start executive-portal`).

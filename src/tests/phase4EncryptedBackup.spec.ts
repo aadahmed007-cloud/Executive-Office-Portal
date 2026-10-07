@@ -8,6 +8,7 @@ import {
   createEncryptedBackup,
   verifyBackupFile,
   restoreTest,
+  decryptAndVerifyBackup,
   encryptBuffer,
   decryptBuffer,
   BACKUP_MAGIC_HEADER
@@ -115,5 +116,101 @@ describe('Phase 4.5: Military-Grade Encrypted Backup & Auto-Verification (Sectio
     expect(restore.success).toBe(true);
     expect(restore.rowCounts.users).toBe(verify.rowCounts.users);
     expect(restore.rowCounts.correspondence).toBe(verify.rowCounts.correspondence);
+  });
+
+  it('6. decryptAndVerifyBackup successfully decrypts to new path, verifies integrity and returns matching row counts', async () => {
+    const result = await createEncryptedBackup({
+      dataDir,
+      backupDir,
+      passphrase: testPassphrase
+    });
+
+    const outPath = path.join(tempDir, 'manual_restored_test.db');
+    const decryptResult = await decryptAndVerifyBackup(result.backupFilePath, outPath, testPassphrase);
+
+    expect(decryptResult.success).toBe(true);
+    expect(decryptResult.outFilePath).toBe(outPath);
+    expect(fs.existsSync(outPath)).toBe(true);
+
+    // Verify file mode (0600 on POSIX)
+    if (process.platform !== 'win32') {
+      const stat = fs.statSync(outPath);
+      expect((stat.mode & 0o777)).toBe(0o600);
+    }
+
+    // Open decrypted file directly and verify row counts match
+    const restoredDb = new Database(outPath, { readonly: true });
+    try {
+      const userCount = restoredDb.prepare('SELECT count(*) as count FROM users').get() as { count: number };
+      const corrCount = restoredDb.prepare('SELECT count(*) as count FROM correspondence').get() as { count: number };
+      expect(userCount.count).toBe(decryptResult.rowCounts.users);
+      expect(corrCount.count).toBe(decryptResult.rowCounts.correspondence);
+      expect(userCount.count).toBeGreaterThan(0);
+    } finally {
+      restoredDb.close();
+    }
+  });
+
+  it('7. decryptAndVerifyBackup with wrong passphrase fails and leaves NO output file', async () => {
+    const result = await createEncryptedBackup({
+      dataDir,
+      backupDir,
+      passphrase: testPassphrase
+    });
+
+    const outPath = path.join(tempDir, 'should_not_exist_wrong_pass.db');
+    await expect(
+      decryptAndVerifyBackup(result.backupFilePath, outPath, 'IncorrectPassphrase123!')
+    ).rejects.toThrow();
+
+    expect(fs.existsSync(outPath)).toBe(false);
+  });
+
+  it('8. decryptAndVerifyBackup with tampered backup file fails and leaves NO output file', async () => {
+    const result = await createEncryptedBackup({
+      dataDir,
+      backupDir,
+      passphrase: testPassphrase
+    });
+
+    const fileBuffer = fs.readFileSync(result.backupFilePath);
+    fileBuffer[fileBuffer.length - 1] ^= 0xff; // corrupt tag / ciphertext
+    const tamperedPath = path.join(backupDir, 'tampered-decrypt-test.db.enc');
+    fs.writeFileSync(tamperedPath, fileBuffer);
+
+    const outPath = path.join(tempDir, 'should_not_exist_tampered.db');
+    await expect(
+      decryptAndVerifyBackup(tamperedPath, outPath, testPassphrase)
+    ).rejects.toThrow();
+
+    expect(fs.existsSync(outPath)).toBe(false);
+  });
+
+  it('9. decryptAndVerifyBackup refuses if target output path already exists', async () => {
+    const result = await createEncryptedBackup({
+      dataDir,
+      backupDir,
+      passphrase: testPassphrase
+    });
+
+    const existingPath = path.join(tempDir, 'pre_existing_file.db');
+    fs.writeFileSync(existingPath, 'existing content', 'utf8');
+
+    await expect(
+      decryptAndVerifyBackup(result.backupFilePath, existingPath, testPassphrase)
+    ).rejects.toThrow('موجود مسبقاً');
+  });
+
+  it('10. decryptAndVerifyBackup refuses live DATA_DIR/app.db path', async () => {
+    const result = await createEncryptedBackup({
+      dataDir,
+      backupDir,
+      passphrase: testPassphrase
+    });
+
+    const liveDbPath = path.join(dataDir, 'app.db');
+    await expect(
+      decryptAndVerifyBackup(result.backupFilePath, liveDbPath, testPassphrase)
+    ).rejects.toThrow();
   });
 });

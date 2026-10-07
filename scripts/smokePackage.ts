@@ -215,6 +215,25 @@ async function runSmokeTest(): Promise<void> {
     });
     console.log('   ✅ تم إنشاء نسخة احتياطية بنجاح باستخدام BACKUP_PASSPHRASE_FILE.');
 
+    // 12. Test backup --decrypt command from inside extracted package
+    console.log('1️⃣1️⃣ اختبار فك التشفير والتحقق لاسترجاع الطوارئ (node dist-server/backup.js --decrypt)...');
+    const decryptedRestoredPath = path.join(smokeSandbox, 'restored_emergency_app.db');
+    execSync(`node dist-server/backup.js --decrypt "${createdBackupFile}" --out "${decryptedRestoredPath}"`, {
+      cwd: smokeSandbox,
+      env: { ...env, BACKUP_PASSPHRASE: testPassphrase },
+      stdio: 'inherit'
+    });
+    if (!fs.existsSync(decryptedRestoredPath)) {
+      throw new Error('فشل فك التشفير: لم يتم العثور على ملف قاعدة البيانات المسترجع');
+    }
+    if (process.platform !== 'win32') {
+      const stat = fs.statSync(decryptedRestoredPath);
+      if ((stat.mode & 0o777) !== 0o600) {
+        throw new Error(`خطأ في أذونات الملف المسترجع: ${(stat.mode & 0o777).toString(8)} (يجب أن يكون 0600)`);
+      }
+    }
+    console.log('   ✅ تم فك تشفير والتحقق من قاعدة البيانات بنجاح في مسار مستقل بأذونات 0600.');
+
     console.log('======================================================================');
     console.log('🎉 نجح اختبار الجاهزية الميدانية الشامل للحزمة (Smoke Test Passed 100%)');
     console.log('======================================================================');

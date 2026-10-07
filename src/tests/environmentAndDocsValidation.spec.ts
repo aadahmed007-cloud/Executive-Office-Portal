@@ -52,8 +52,8 @@ describe('Environment Variables & Docs Contract Validation', () => {
           const matches = content.matchAll(/process\.env\.([A-Z0-9_]+)/g);
           for (const m of matches) {
             const varName = m[1];
-            // Ignore internal vitest/test/build flags or comment placeholders
-            if (!['VITEST', 'DISABLE_HMR', 'APP_PORT', 'XYZ', 'VAR'].includes(varName)) {
+            // Ignore internal vitest/test/build flags or standard CI runner flags or comment placeholders
+            if (!['VITEST', 'DISABLE_HMR', 'APP_PORT', 'XYZ', 'VAR', 'CI', 'GITHUB_ACTIONS'].includes(varName)) {
               foundEnvVars.add(varName);
             }
           }

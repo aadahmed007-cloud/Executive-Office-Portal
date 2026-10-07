@@ -296,7 +296,8 @@ export class SqliteEngine {
 
       // 2. Provision Users with Random One-Time Passwords
       const isTestEnv = process.env.NODE_ENV === 'test' || Boolean(process.env.VITEST);
-      if (!isTestEnv) {
+      const isCiEnv = Boolean(process.env.CI) || Boolean(process.env.GITHUB_ACTIONS);
+      if (!isTestEnv && !isCiEnv) {
         console.log('\n======================================================');
         console.log('🔑 INITIAL SECURITY PROVISIONING: CREATING USERS');
         console.log('======================================================');
@@ -319,7 +320,9 @@ export class SqliteEngine {
           const hash = crypto.pbkdf2Sync(initPass, salt, 600000, 32, 'sha256');
           passHash = hash.toString('hex');
           passSalt = salt.toString('hex');
-          console.log(`👤 User: [${u.username}] (${u.role}) -> Initial Password: ${initPass}`);
+          if (!isCiEnv) {
+            console.log(`👤 User: [${u.username}] (${u.role}) -> Initial Password: ${initPass}`);
+          }
         }
 
         userStmt.run(
@@ -339,7 +342,7 @@ export class SqliteEngine {
         );
       }
 
-      if (!isTestEnv) {
+      if (!isTestEnv && !isCiEnv) {
         console.log('======================================================\n');
       }
 

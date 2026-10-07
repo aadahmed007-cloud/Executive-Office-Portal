@@ -6,16 +6,24 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
-  build:
+  check:
+    name: Typecheck, Test, Build, and Smoke Package
     runs-on: ubuntu-latest
+    env:
+      CI: 'true'
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v4.2.0
         with:
           node-version: '22'
-      - run: npm install
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run verification pipeline
+        run: npm run check

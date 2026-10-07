@@ -320,10 +320,151 @@ export async function restoreTest(backupFilePath: string, passphrase?: string): 
   }
 }
 
+export async function decryptAndVerifyBackup(
+  backupFilePath: string,
+  outFilePath: string,
+  passphrase?: string
+): Promise<{ success: boolean; outFilePath: string; rowCounts: Record<string, number> }> {
+  if (!backupFilePath) {
+    throw new Error('يرجى تحديد مسار ملف النسخة الاحتياطية المراد فك تشفيرها');
+  }
+  if (!outFilePath) {
+    throw new Error('يرجى تحديد مسار ملف الإخراج المستهدف (--out <path>)');
+  }
+
+  const resolvedBackupPath = path.resolve(backupFilePath);
+  if (!fs.existsSync(resolvedBackupPath)) {
+    throw new Error(`ملف النسخة الاحتياطية غير موجود: ${backupFilePath}`);
+  }
+
+  const resolvedOutPath = path.resolve(outFilePath);
+
+  // 1. Refuse to overwrite existing file
+  if (fs.existsSync(resolvedOutPath)) {
+    throw new Error(`مسار ملف الإخراج موجود مسبقاً، يمنع استبدال ملف قائم: ${resolvedOutPath}`);
+  }
+
+  // 2. Refuse live DATA_DIR/app.db path
+  const liveDataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.resolve(process.cwd(), 'data');
+  const liveDbPath = path.join(liveDataDir, 'app.db');
+  if (path.resolve(resolvedOutPath) === path.resolve(liveDbPath)) {
+    throw new Error(`حظر أمني: يمنع فك التشفير مباشرة فوق مسار قاعدة البيانات الحية (${liveDbPath}). يرجى تحديد مسار جديد ونقله يدوياً بعد اكتمال التحقق.`);
+  }
+
+  // 3. Resolve passphrase
+  const resolvedPassphrase = resolvePassphrase(passphrase);
+
+  // 4. Decrypt buffer
+  const fileContent = fs.readFileSync(resolvedBackupPath);
+  const isEncrypted = fileContent.subarray(0, 16).equals(BACKUP_MAGIC_HEADER);
+
+  let plainBuffer: Buffer;
+  if (isEncrypted) {
+    if (!resolvedPassphrase) {
+      throw new Error('كلمة مرور النسخ الاحتياطي (BACKUP_PASSPHRASE أو BACKUP_PASSPHRASE_FILE) مطلوبة لفك التشفير');
+    }
+    plainBuffer = decryptBuffer(fileContent, resolvedPassphrase);
+  } else {
+    plainBuffer = fileContent;
+  }
+
+  // 5. Ensure parent dir exists and write with 0600 mode
+  fs.mkdirSync(path.dirname(resolvedOutPath), { recursive: true });
+  fs.writeFileSync(resolvedOutPath, plainBuffer, { mode: 0o600 });
+  if (process.platform !== 'win32') {
+    try { fs.chmodSync(resolvedOutPath, 0o600); } catch {}
+  }
+
+  // 6. Verification: integrity_check, foreign_key_check, and audit chain verification
+  let verifyDb: Database.Database | null = null;
+  try {
+    verifyDb = new Database(resolvedOutPath, { readonly: true });
+
+    // Integrity check
+    const integrityResult = verifyDb.prepare('PRAGMA integrity_check').all() as { integrity_check: string }[];
+    if (!integrityResult || integrityResult.length === 0 || integrityResult[0].integrity_check !== 'ok') {
+      throw new Error(`فشل فحص سلامة SQLite: ${JSON.stringify(integrityResult)}`);
+    }
+
+    // Foreign key check
+    const fkResult = verifyDb.prepare('PRAGMA foreign_key_check').all();
+    if (fkResult && fkResult.length > 0) {
+      throw new Error(`فشل فحص المفاتيح الأجنبية: ${JSON.stringify(fkResult)}`);
+    }
+
+    // Cryptographic audit log verification
+    const auditRows = verifyDb.prepare('SELECT * FROM audit_log ORDER BY seq ASC').all() as any[];
+    let checkpoint: AuditCheckpoint | null = null;
+    try {
+      const checkpointRow = verifyDb.prepare('SELECT audit_last_seq, audit_head_hash, audit_count FROM settings LIMIT 1').get() as any;
+      if (checkpointRow) {
+        checkpoint = {
+          last_seq: checkpointRow.audit_last_seq,
+          head_hash: checkpointRow.audit_head_hash,
+          count: checkpointRow.audit_count
+        };
+      }
+    } catch {}
+
+    const auditVerify = await verifyAuditLogIntegrity(auditRows, checkpoint);
+    if (!auditVerify.isValid) {
+      throw new Error(`فشل التحقق التشفيري لسجل الرقابة: ${auditVerify.brokenReason}`);
+    }
+
+    // Parity row counts
+    const tables = ['users', 'correspondence', 'directives', 'meetings', 'matters', 'contacts', 'audit_log', 'settings'];
+    const rowCounts: Record<string, number> = {};
+    for (const t of tables) {
+      try {
+        const res = verifyDb.prepare(`SELECT count(*) as count FROM ${t}`).get() as { count: number };
+        rowCounts[t] = res.count;
+      } catch {
+        rowCounts[t] = 0;
+      }
+    }
+
+    verifyDb.close();
+    verifyDb = null;
+
+    return { success: true, outFilePath: resolvedOutPath, rowCounts };
+  } catch (err) {
+    if (verifyDb) {
+      try { verifyDb.close(); } catch {}
+      verifyDb = null;
+    }
+    // Delete output file if verification fails
+    if (fs.existsSync(resolvedOutPath)) {
+      try { fs.unlinkSync(resolvedOutPath); } catch {}
+    }
+    throw err;
+  }
+}
+
 // CLI Execution Handler
 async function main() {
   const args = process.argv.slice(2);
   const passphrase = resolvePassphrase();
+
+  if (args.includes('--decrypt')) {
+    const decryptIdx = args.indexOf('--decrypt');
+    const outIdx = args.indexOf('--out');
+    let targetFile = decryptIdx !== -1 && args[decryptIdx + 1] && !args[decryptIdx + 1].startsWith('--') ? args[decryptIdx + 1] : undefined;
+    let outFile = outIdx !== -1 && args[outIdx + 1] && !args[outIdx + 1].startsWith('--') ? args[outIdx + 1] : undefined;
+    if (!targetFile || !outFile) {
+      console.error('❌ يرجى تحديد مسار ملف النسخة ومسار الإخراج: node dist-server/backup.js --decrypt <backup.db.enc> --out <new-file-path>');
+      process.exit(1);
+    }
+    console.log(`🔓 بدء فك تشفير والتحقق من النسخة الاحتياطية: ${targetFile} -> ${outFile}`);
+    try {
+      const res = await decryptAndVerifyBackup(targetFile, outFile, passphrase);
+      console.log(`✅ تم فك تشفير النسخة بنجاح والتحقق من سلامتها وهيكلها التشفيري: ${res.outFilePath}`);
+      console.table(res.rowCounts);
+      process.exit(0);
+    } catch (err: any) {
+      console.error(`❌ فشل فك التشفير أو التحقق: ${err.message}`);
+      process.exit(1);
+    }
+  }
 
   if (args.includes('--verify')) {
     const fileIdx = args.indexOf('--verify') + 1;
