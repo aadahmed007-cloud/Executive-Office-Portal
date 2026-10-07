@@ -135,13 +135,15 @@ node dist-server/verifyPackage.js release/executive-office-portal-*.tar.gz
 ### ح. النسخ الاحتياطي والاسترجاع اليدوي الدقيق (Backups & Manual Restore):
 - **النسخ اليومي:** جدولة تشغيل يومي لأمر النسخ المشفر بكلمة سر قوية (`cron` أو `Task Scheduler`).
 - **الفحص الدوري:** إجراء اختبار استرجاع شهري دوري في بيئة معزولة للتأكد من سلامة البيانات: `node dist-server/backup.js --restore-test <backup_file>`.
-- **خطوات الاسترجاع اليدوي عند الطوارئ:**
-  1. إيقاف خدمة التطبيق (`systemctl stop executive-portal`).
-  2. أخذ نسخة احتياطية فورية من ملف قاعدة البيانات الحالي `app.db`.
-  3. فك تشفير وفحص سلامة النسخة المراد استرجاعها في بيئة مؤقتة معزولة.
-  4. استبدال ملف `app.db` بالملف المسترجع.
+- **خطوات الاسترجاع اليدوي عند الطوارئ (Manual Disaster Recovery Procedure):**
+  1. إيقاف خدمة التطبيق فوراً لمنع أي كتابة (`systemctl stop executive-portal`).
+  2. الاحتفاظ بالنسخة الحالية من ملف `app.db` كإجراء وقائي احترازي.
+  3. فك تشفير وفحص سلامة النسخة المراد استرجاعها في بيئة مؤقتة معزولة (`node dist-server/backup.js --restore-test <backup_file>`).
+  4. استبدال ملف `app.db` بالملف المسترجع وضبط الصلاحيات الصارمة (0600).
   5. حذف ملفات `app.db-wal` و `app.db-shm` السابقة لضمان عدم التعارض.
-  6. تشغيل الخدمة مجدداً والتأكد من سلامة سلسلة سجل الرقابة عبر الفحص الميداني.
+  6. إعادة تشغيل الخدمة (`systemctl start executive-portal`).
+  7. التحقق التشفيري من سلامة سلسلة سجل الرقابة (`node dist-server/backup.js --verify <backup_file>`).
+  8. إجراء اختبار الجاهزية التشغيلية (Smoke test على `/api/health` وتجربة الدخول).
 
 
 ### ط. قائمة الفحص بعد التثبيت (Smoke Test Checklist):

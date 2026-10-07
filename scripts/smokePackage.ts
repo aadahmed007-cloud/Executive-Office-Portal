@@ -55,71 +55,71 @@ async function runSmokeTest(): Promise<void> {
 
   // 4. Extract package into sandbox
   const smokeSandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'smoke-pkg-'));
-
-  console.log(`4️⃣  جاري فك ضغط الحزمة في بيئة معزولة: ${smokeSandbox}`);
-  if (archivePath.endsWith('.zip')) {
-    execSync(`powershell -Command "Expand-Archive -Path '${archivePath}' -DestinationPath '${smokeSandbox}' -Force"`, { stdio: 'pipe' });
-  } else {
-    execSync(`tar -xzf "${archivePath}" -C "${smokeSandbox}"`, { stdio: 'pipe' });
-  }
-
-  // 5. Verify NO dev tooling in node_modules
-  console.log('5️⃣  التحقق الصارم من خلو الحزمة من أدوات التطوير (No Dev Tooling in Production)...');
-  const binDir = path.join(smokeSandbox, 'node_modules', '.bin');
-  if (fs.existsSync(binDir)) {
-    const bins = fs.readdirSync(binDir);
-    const prohibited = ['tsx', 'vite', 'esbuild', 'tsc', 'typescript', 'vitest', 'supertest'];
-    for (const b of bins) {
-      if (prohibited.includes(b)) {
-        throw new Error(`Security Failure: Found prohibited dev tool ${b} in extracted production package node_modules/.bin`);
-      }
-    }
-    console.log(`   ✅ تم التحقق من .bin: لا توجد أدوات تطوير (${bins.join(', ') || 'فارغ'})`);
-  }
-
-  // Verify NO typescript source files
-  function assertNoTs(dir: string) {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory() && entry.name !== 'node_modules') {
-        assertNoTs(full);
-      } else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))) {
-        throw new Error(`Security Failure: Found TypeScript source file in production package: ${full}`);
-      }
-    }
-  }
-  assertNoTs(smokeSandbox);
-  console.log('   ✅ تم التحقق: لا توجد أي ملفات شفرة مصدرية غير مترجمة (.ts / .tsx).');
-
-  // 6. Start production server inside extracted package
-  const testPort = 3389 + Math.floor(Math.random() * 500);
-  const testDataDir = path.join(smokeSandbox, 'data');
-  const testBackupDir = path.join(smokeSandbox, 'var', 'backups');
-  fs.mkdirSync(testDataDir, { recursive: true });
-  fs.mkdirSync(testBackupDir, { recursive: true });
-
-  const env = {
-    ...process.env,
-    PORT: String(testPort),
-    APP_PORT: String(testPort),
-    NODE_ENV: 'production',
-    DATA_DIR: testDataDir,
-    BACKUP_DIR: testBackupDir,
-    COOKIE_SECURE: 'false'
-  };
-
-  console.log(`6️⃣  جاري تشغيل خادم الإنتاج المعزول: node dist-server/server.js (المنفذ: ${testPort})...`);
-  const serverProcess = spawn('node', ['dist-server/server.js'], {
-    cwd: smokeSandbox,
-    env,
-    stdio: ['ignore', 'pipe', 'pipe']
-  });
-
-  let serverOutput = '';
-  serverProcess.stdout?.on('data', (d) => (serverOutput += d.toString()));
-  serverProcess.stderr?.on('data', (d) => (serverOutput += d.toString()));
+  let serverProcess: ReturnType<typeof spawn> | undefined;
 
   try {
+    console.log(`4️⃣  جاري فك ضغط الحزمة في بيئة معزولة: ${smokeSandbox}`);
+    if (archivePath.endsWith('.zip')) {
+      execSync(`powershell -Command "Expand-Archive -Path '${archivePath}' -DestinationPath '${smokeSandbox}' -Force"`, { stdio: 'pipe' });
+    } else {
+      execSync(`tar -xzf "${archivePath}" -C "${smokeSandbox}"`, { stdio: 'pipe' });
+    }
+
+    // 5. Verify NO dev tooling in node_modules
+    console.log('5️⃣  التحقق الصارم من خلو الحزمة من أدوات التطوير (No Dev Tooling in Production)...');
+    const binDir = path.join(smokeSandbox, 'node_modules', '.bin');
+    if (fs.existsSync(binDir)) {
+      const bins = fs.readdirSync(binDir);
+      const prohibited = ['tsx', 'vite', 'esbuild', 'tsc', 'typescript', 'vitest', 'supertest'];
+      for (const b of bins) {
+        if (prohibited.includes(b)) {
+          throw new Error(`Security Failure: Found prohibited dev tool ${b} in extracted production package node_modules/.bin`);
+        }
+      }
+      console.log(`   ✅ تم التحقق من .bin: لا توجد أدوات تطوير (${bins.join(', ') || 'فارغ'})`);
+    }
+
+    // Verify NO typescript source files
+    function assertNoTs(dir: string) {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory() && entry.name !== 'node_modules') {
+          assertNoTs(full);
+        } else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))) {
+          throw new Error(`Security Failure: Found TypeScript source file in production package: ${full}`);
+        }
+      }
+    }
+    assertNoTs(smokeSandbox);
+    console.log('   ✅ تم التحقق: لا توجد أي ملفات شفرة مصدرية غير مترجمة (.ts / .tsx).');
+
+    // 6. Start production server inside extracted package
+    const testPort = 3389 + Math.floor(Math.random() * 500);
+    const testDataDir = path.join(smokeSandbox, 'data');
+    const testBackupDir = path.join(smokeSandbox, 'var', 'backups');
+    fs.mkdirSync(testDataDir, { recursive: true });
+    fs.mkdirSync(testBackupDir, { recursive: true });
+
+    const env = {
+      ...process.env,
+      PORT: String(testPort),
+      APP_PORT: String(testPort),
+      NODE_ENV: 'production',
+      DATA_DIR: testDataDir,
+      BACKUP_DIR: testBackupDir,
+      COOKIE_SECURE: 'false'
+    };
+
+    console.log(`6️⃣  جاري تشغيل خادم الإنتاج المعزول: node dist-server/server.js (المنفذ: ${testPort})...`);
+    serverProcess = spawn('node', ['dist-server/server.js'], {
+      cwd: smokeSandbox,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    let serverOutput = '';
+    serverProcess.stdout?.on('data', (d) => (serverOutput += d.toString()));
+    serverProcess.stderr?.on('data', (d) => (serverOutput += d.toString()));
     // Wait for server to become healthy
     let isHealthy = false;
     for (let i = 0; i < 20; i++) {
@@ -220,9 +220,11 @@ async function runSmokeTest(): Promise<void> {
     console.log('======================================================================');
   } finally {
     // Stop server
-    serverProcess.kill('SIGTERM');
-    await sleep(500);
-    try { serverProcess.kill('SIGKILL'); } catch {}
+    if (serverProcess) {
+      serverProcess.kill('SIGTERM');
+      await sleep(500);
+      try { serverProcess.kill('SIGKILL'); } catch {}
+    }
 
     if (fs.existsSync(smokeSandbox)) {
       try {

@@ -84,15 +84,12 @@ describe('Environment Variables & Docs Contract Validation', () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
     const npmScripts = Object.keys(pkg.scripts || {});
 
-    // Derive declared build outputs from esbuild --outfile flags in build scripts
+    // Derive declared build outputs from esbuild --outfile targets in package.json "build:server"
     const declaredBuildOutputs = new Set<string>();
-    for (const s of Object.values(pkg.scripts || {})) {
-      if (typeof s === 'string') {
-        const matches = s.matchAll(/--outfile=([^\s&|;]+)/g);
-        for (const m of matches) {
-          declaredBuildOutputs.add(m[1].replace(/\\/g, '/'));
-        }
-      }
+    const buildServerScript = typeof pkg.scripts?.['build:server'] === 'string' ? pkg.scripts['build:server'] : '';
+    const matches = buildServerScript.matchAll(/--outfile=([^\s&|;]+)/g);
+    for (const m of matches) {
+      declaredBuildOutputs.add(m[1].replace(/\\/g, '/'));
     }
 
     for (const docFile of docFiles) {
