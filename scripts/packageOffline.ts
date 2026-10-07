@@ -117,7 +117,47 @@ async function buildOfflinePackage(): Promise<void> {
     }
   }
 
-  // 5. Security audit & exclusion verification
+  // 5. Prune non-target native prebuilds & empty scope directories
+  console.log('✂️  تقليص الحجم واستبعاد الملفات الثنائية غير المطابقة لمعمارية النظام...');
+  const prunedArtifacts: string[] = [];
+
+  // Prune better-sqlite3 prebuilds for other platforms/architectures
+  const prebuildsDir = path.join(stageDir, 'node_modules', 'better-sqlite3', 'prebuilds');
+  if (fs.existsSync(prebuildsDir)) {
+    const targetPrebuild = `${platform}-${arch}.node`;
+    const prebuildFiles = fs.readdirSync(prebuildsDir);
+    for (const pb of prebuildFiles) {
+      if (pb.endsWith('.node') && pb !== targetPrebuild) {
+        const fullPbPath = path.join(prebuildsDir, pb);
+        try {
+          fs.unlinkSync(fullPbPath);
+          prunedArtifacts.push(`better-sqlite3/prebuilds/${pb}`);
+        } catch {}
+      }
+    }
+  }
+
+  // Remove empty scope directories from node_modules (e.g. @types or empty namespaces)
+  const nodeModulesDir = path.join(stageDir, 'node_modules');
+  if (fs.existsSync(nodeModulesDir)) {
+    const scopeDirs = fs.readdirSync(nodeModulesDir).filter((d) => d.startsWith('@'));
+    for (const s of scopeDirs) {
+      const scopePath = path.join(nodeModulesDir, s);
+      try {
+        if (fs.statSync(scopePath).isDirectory()) {
+          const contents = fs.readdirSync(scopePath);
+          if (contents.length === 0) {
+            fs.rmdirSync(scopePath);
+            prunedArtifacts.push(`node_modules/${s}`);
+          }
+        }
+      } catch {}
+    }
+  }
+
+  console.log(`   ✅ تم استبعاد ${prunedArtifacts.length} ملف ومجلد ثنائي غير مطابق:`, prunedArtifacts.join(', '));
+
+  // 6. Security audit & exclusion verification
   console.log('🔒 فحص خلو الحزمة من أي ملفات حساسة أو بيانات تشغيل أو أدوات تطوير...');
   const allStaged = getAllFiles(stageDir);
   for (const f of allStaged) {
@@ -183,6 +223,7 @@ async function buildOfflinePackage(): Promise<void> {
     nodeVersionRequired: `v${nodeMajor}.x`,
     builtAt: new Date().toISOString(),
     gitCommit,
+    prunedArtifacts,
     totalFiles: manifestFiles.length,
     files: manifestFiles
   };

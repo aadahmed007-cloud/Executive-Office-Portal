@@ -6,8 +6,9 @@ node_modules/
 /dist-server/
 /dist-temp/
 /release/
-/.test_offline_sandbox/
-/.test_smoke_pkg*/
+/.test_*/
+/.temp_pkg_verify_*/
+/.stage/
 /coverage/
 /build/
 

@@ -159,7 +159,6 @@ sudo chmod 600 /opt/executive-portal/.env
 | `ALLOWED_ORIGINS` | `https://portal.local` | قائمة نطاقات الأصل المسموح بها لمنع هجمات CSRF و CORS غير المصرح بها. |
 | `SESSION_IDLE_MINUTES` | `30` | مهلة انتهاء الجلسة عند عدم النشاط (30 دقيقة افتراضياً). |
 | `SESSION_ABSOLUTE_HOURS`| `12` | أقصى مدة مسموحة للجلسة الواحدة بالساعات قبل إلزام تسجيل الدخول مجدداً. |
-| `RESTORE_ENABLED` | `false` | **مغلق دائماً (`false`)** أثناء العمل العادي. لا يُفعل إلا مؤقتاً أثناء عمليات الاسترجاع الطارئة. |
 
 ---
 
@@ -323,6 +322,43 @@ schtasks /create /tn "ExecutivePortal_MonthlyRestoreTest" `
   /sc monthly /d 1 /st 01:00 /ru "svc_portal" /rp "<ACCOUNT_PASSWORD>" /rl HIGHEST
 ```
 
+### 4. خطوات الاسترجاع اليدوي الدقيق لقاعدة البيانات عند الطوارئ (Manual Disaster Recovery Procedure):
+في حال حدوث تلف في الخادم أو الحاجة للرجوع إلى نسخة احتياطية سابقة، يتم تنفيذ الخطوات اليدوية التالية بالترتيب الدقيق:
+1. **إيقاف الخدمة فوراً لمنع أي عمليات كتابة:**
+   ```bash
+   sudo systemctl stop executive-portal
+   # على Windows: nssm stop ExecutivePortalService
+   ```
+2. **الاحتفاظ بالنسخة الحالية كإجراء أمان احترازي:**
+   ```bash
+   sudo cp /var/lib/executive_portal/data/app.db /var/lib/executive_portal/data/app.db.bak.$(date +%Y%m%d%H%M)
+   ```
+3. **فك التشفير والتحقق من سلامة النسخة الاحتياطية المستهدفة في بيئة معزولة:**
+   ```bash
+   cd /opt/executive-portal
+   BACKUP_PASSPHRASE_FILE="/etc/executive_portal/backup.secret" node dist-server/backup.js --restore-test /var/backups/executive_portal/backup-YYYYMMDDHHMMSS.db.enc
+   ```
+4. **استبدال ملف قاعدة البيانات `app.db` بالملف المسترجع:**
+   ```bash
+   # فك التشفير ووضع الملف مباشرة في مسار البيانات
+   # (أو استخدام النسخة الناتجة بعد التحقق)
+   sudo cp /tmp/restored_app.db /var/lib/executive_portal/data/app.db
+   ```
+5. **حذف ملفات التسجيل المسبق القديمة (WAL/SHM) لمنع التعارض:**
+   ```bash
+   sudo rm -f /var/lib/executive_portal/data/app.db-wal /var/lib/executive_portal/data/app.db-shm
+   ```
+6. **ضبط الصلاحيات الصارمة (0600) لحساب الخدمة:**
+   ```bash
+   sudo chown portal_svc:portal_svc /var/lib/executive_portal/data/app.db
+   sudo chmod 0600 /var/lib/executive_portal/data/app.db
+   ```
+7. **إعادة تشغيل الخدمة والتحقق الميداني:**
+   ```bash
+   sudo systemctl start executive-portal
+   sudo systemctl status executive-portal
+   ```
+
 ---
 
 ## القسم ط: قائمة الفحص والتحقق بعد التثبيت (Smoke Test Checklist)
@@ -374,8 +410,17 @@ sudo systemctl status executive-portal
 
 ---
 
-## القسم ل: مصفوفة القرارات المعلقة لمسؤولي تكنولوجيا وأمن المعلومات
+## القسم ل: قائمة التحقق الإلزامية قبل الإطلاق الحي الفعلي ومصفوفة القرارات
 
+### 1. قائمة التحقق الإلزامية قبل الإطلاق الحي (Before Go-Live Mandatory Checklist):
+- [ ] **1. المراجعة الأمنية المستقلة (Independent Security Review):** إتمام اختبار الاختراق والتدقيق الأمني المستقل للنظام وخلوه من الثغرات.
+- [ ] **2. الاعتماد الأمني والمؤسسي (IT & Security Sign-off):** الحصول على المصادقة الرسمية المكتوبة من قطاع تكنولوجيا وأمن المعلومات بالهيئة.
+- [ ] **3. الاختبار الميداني على الأجهزة الحقيقية (Physical Hardware Test):** اختبار جميع خطوات التثبيت والتشغيل على الجهاز الفعلي المخصص (Linux / Windows Server).
+- [ ] **4. تمرين استرجاع النسخة الاحتياطية (Backup Restore Drill):** تنفيذ تجربة استرجاع كاملة لمرة واحدة على الأقل والتأكد من سلامة سلسلة سجل التدقيق.
+- [ ] **5. تسليم بيانات الدخول الأولية (Credentials Handover):** تسليم بيانات الدخول في مظاريف سرية مختومة وفرض تغيير كلمات المرور عند أول تسجيل دخول.
+- [ ] **6. تثبيت شهادات HTTPS (TLS Certificate Installed):** تثبيت شهادة TLS المعتمدة على الخادم والبروكسي وعلى أجهزة المستخدمين المصرح لهم بالمكتب.
+
+### 2. مصفوفة القرارات التشغيلية المعلقة:
 - [ ] **1. الموقع المادي للخادم:** تأمين الخادم داخل خزانة مقفلة في مكتب الرئيس.
 - [ ] **2. سياسة الوصول عن بعد:** قصر الوصول على شبكة المكتب الداخلية أو اعتماد VPN بروتوكولي مؤمن.
 - [ ] **3. هيئة الشهادات الرقمية:** توفير شهادة TLS داخلية معتمدة على الخادم والبروكسي.

@@ -5,6 +5,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import http from 'http';
 import { spawn, execSync } from 'child_process';
 import { verifyPackageArchive } from './verifyPackage.js';
@@ -53,9 +54,7 @@ async function runSmokeTest(): Promise<void> {
   await verifyPackageArchive(archivePath);
 
   // 4. Extract package into sandbox
-  const smokeSandbox = path.join(rootDir, `.test_smoke_pkg_${Date.now()}`);
-  if (fs.existsSync(smokeSandbox)) fs.rmSync(smokeSandbox, { recursive: true, force: true });
-  fs.mkdirSync(smokeSandbox, { recursive: true });
+  const smokeSandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'smoke-pkg-'));
 
   console.log(`4️⃣  جاري فك ضغط الحزمة في بيئة معزولة: ${smokeSandbox}`);
   if (archivePath.endsWith('.zip')) {

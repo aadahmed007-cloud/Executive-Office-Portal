@@ -67,7 +67,6 @@ TRUST_PROXY=true
 ALLOWED_ORIGINS=https://portal.local,https://192.168.10.50
 SESSION_IDLE_MINUTES=30
 SESSION_ABSOLUTE_HOURS=12
-RESTORE_ENABLED=false
 
 ```
 
@@ -133,10 +132,16 @@ node dist-server/verifyPackage.js release/executive-office-portal-*.tar.gz
 - استخدام ملف خدمة `systemd` في Linux مع ضبط `Restart=on-failure`, `ProtectSystem=strict`, `PrivateTmp=true`.
 - استخدام `NSSM` كخدمة مدارة على نظام Windows.
 
-### ح. النسخ الاحتياطي والاسترجاع (Backups):
-- جدولة تشغيل يومي لأمر النسخ المشفر بكلمة سر قوية (`cron` أو `Task Scheduler`).
-- إجراء اختبار استرجاع شهري دوري في بيئة معزولة للتأكد من سلامة البيانات: `node dist-server/backup.js --restore-test <backup_file>`.
-- إبقاء `RESTORE_ENABLED=false` في الأوقات العادية وتفعيله مؤقتاً فقط أثناء الاسترجاع.
+### ح. النسخ الاحتياطي والاسترجاع اليدوي الدقيق (Backups & Manual Restore):
+- **النسخ اليومي:** جدولة تشغيل يومي لأمر النسخ المشفر بكلمة سر قوية (`cron` أو `Task Scheduler`).
+- **الفحص الدوري:** إجراء اختبار استرجاع شهري دوري في بيئة معزولة للتأكد من سلامة البيانات: `node dist-server/backup.js --restore-test <backup_file>`.
+- **خطوات الاسترجاع اليدوي عند الطوارئ:**
+  1. إيقاف خدمة التطبيق (`systemctl stop executive-portal`).
+  2. أخذ نسخة احتياطية فورية من ملف قاعدة البيانات الحالي `app.db`.
+  3. فك تشفير وفحص سلامة النسخة المراد استرجاعها في بيئة مؤقتة معزولة.
+  4. استبدال ملف `app.db` بالملف المسترجع.
+  5. حذف ملفات `app.db-wal` و `app.db-shm` السابقة لضمان عدم التعارض.
+  6. تشغيل الخدمة مجدداً والتأكد من سلامة سلسلة سجل الرقابة عبر الفحص الميداني.
 
 
 ### ط. قائمة الفحص بعد التثبيت (Smoke Test Checklist):

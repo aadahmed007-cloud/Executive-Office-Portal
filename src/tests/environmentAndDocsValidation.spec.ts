@@ -84,6 +84,17 @@ describe('Environment Variables & Docs Contract Validation', () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
     const npmScripts = Object.keys(pkg.scripts || {});
 
+    // Derive declared build outputs from esbuild --outfile flags in build scripts
+    const declaredBuildOutputs = new Set<string>();
+    for (const s of Object.values(pkg.scripts || {})) {
+      if (typeof s === 'string') {
+        const matches = s.matchAll(/--outfile=([^\s&|;]+)/g);
+        for (const m of matches) {
+          declaredBuildOutputs.add(m[1].replace(/\\/g, '/'));
+        }
+      }
+    }
+
     for (const docFile of docFiles) {
       if (!fs.existsSync(docFile)) continue;
       const content = fs.readFileSync(docFile, 'utf8');
@@ -107,12 +118,14 @@ describe('Environment Variables & Docs Contract Validation', () => {
           .replace(/^C:\/ExecutivePortal\//i, '')
           .replace(/^D:\/ExecutivePortal\//i, '');
 
-        const possiblePaths = [
-          path.join(rootDir, normalized),
-          path.join(rootDir, normalized.replace(/^dist-server\//, 'scripts/').replace(/\.js$/, '.ts'))
-        ];
-        const exists = possiblePaths.some((p) => fs.existsSync(p));
-        expect(exists, `Documentation in ${path.basename(docFile)} references non-existent node file "${rawFilePath}" (normalized: "${normalized}")`).toBe(true);
+        const isDeclaredOutput = declaredBuildOutputs.has(normalized);
+        const existsOnFs = fs.existsSync(path.join(rootDir, normalized));
+        const isValid = isDeclaredOutput || existsOnFs;
+
+        expect(
+          isValid,
+          `Documentation in ${path.basename(docFile)} references non-existent node file "${rawFilePath}" (normalized: "${normalized}"). It is neither on the filesystem nor in declared build outputs: [${Array.from(declaredBuildOutputs).join(', ')}]`
+        ).toBe(true);
       }
     }
   });

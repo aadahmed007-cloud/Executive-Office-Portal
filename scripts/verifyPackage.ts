@@ -5,6 +5,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import crypto from 'crypto';
 import { execSync } from 'child_process';
 
@@ -75,11 +76,7 @@ export async function verifyPackageArchive(specifiedPath?: string): Promise<bool
   }
 
   // 2. Extract into temporary sandbox
-  const tempExtractDir = path.join(rootDir, '.temp_pkg_verify_' + Date.now());
-  if (fs.existsSync(tempExtractDir)) {
-    fs.rmSync(tempExtractDir, { recursive: true, force: true });
-  }
-  fs.mkdirSync(tempExtractDir, { recursive: true });
+  const tempExtractDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pkg-verify-'));
 
   try {
     console.log('📂 جاري فك ضغط الحزمة في بيئة معزولة مؤقتة...');

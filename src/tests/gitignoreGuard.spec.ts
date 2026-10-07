@@ -73,7 +73,7 @@ describe('.gitignore Source Code Safety Guard (Item A.3)', () => {
     ).toEqual([]);
   });
 
-  it('ensures .gitignore ignores build output and test sandbox directories (/dist-server/, /release/, /.test_offline_sandbox/)', () => {
+  it('ensures .gitignore ignores build output and test sandbox directories (/dist-server/, /release/, /.test_*/, /.temp_pkg_verify_*/, /.stage/)', () => {
     const gitignorePath = path.join(root, '.gitignore');
     const gitignoreContent = fs.readFileSync(gitignorePath, 'utf-8');
     const ig = ignore().add(gitignoreContent);
@@ -82,7 +82,9 @@ describe('.gitignore Source Code Safety Guard (Item A.3)', () => {
       'dist/index.html',
       'dist-server/server.js',
       'release/package.tar.gz',
-      '.test_offline_sandbox/temp.txt'
+      '.test_smoke_pkg_12345/temp.txt',
+      '.temp_pkg_verify_12345/manifest.json',
+      '.stage/package.json'
     ];
 
     for (const p of artifactPaths) {

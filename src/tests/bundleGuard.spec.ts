@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { execSync } from 'child_process';
 
 describe('Phase 2.5 F3: Architecture & Bundle Guard Test', () => {
@@ -107,48 +108,51 @@ describe('Phase 2.5 F3: Architecture & Bundle Guard Test', () => {
   });
 
   it('(b) & (c) build to temp outDir must succeed and contain no SQL DDL, wasm or password hashes', () => {
-    const tempOutDir = path.resolve('dist-temp');
-    if (fs.existsSync(tempOutDir)) {
-      fs.rmSync(tempOutDir, { recursive: true, force: true });
-    }
+    const tempOutDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vite-bundle-guard-'));
 
-    // Run build without swallowing errors
-    execSync(`npx vite build --outDir ${tempOutDir}`, { stdio: 'pipe' });
+    try {
+      // Run build without swallowing errors
+      execSync(`npx vite build --outDir "${tempOutDir}"`, { stdio: 'pipe' });
 
-    if (!fs.existsSync(tempOutDir)) {
-      expect.fail('Vite build did not generate any output directory.');
-    }
+      if (!fs.existsSync(tempOutDir)) {
+        expect.fail('Vite build did not generate any output directory.');
+      }
 
-    function scanBuildDir(dir: string) {
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        const fullPath = path.join(dir, entry.name);
-        
-        if (entry.isDirectory()) {
-          scanBuildDir(fullPath);
-        } else if (entry.isFile()) {
-          // Fail on any .wasm file
-          if (entry.name.endsWith('.wasm')) {
-            expect.fail(`Found forbidden .wasm file in build output: ${entry.name}`);
-          }
+      function scanBuildDir(dir: string) {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          
+          if (entry.isDirectory()) {
+            scanBuildDir(fullPath);
+          } else if (entry.isFile()) {
+            // Fail on any .wasm file
+            if (entry.name.endsWith('.wasm')) {
+              expect.fail(`Found forbidden .wasm file in build output: ${entry.name}`);
+            }
 
-          const content = fs.readFileSync(fullPath, 'utf8');
+            const content = fs.readFileSync(fullPath, 'utf8');
 
-          // Fail on strings: "CREATE TABLE", "password_hash", "PBKDF2", "sql-wasm"
-          const forbiddenStrings = ['CREATE TABLE', 'password_hash', 'PBKDF2', 'sql-wasm'];
-          for (const str of forbiddenStrings) {
-            if (content.includes(str)) {
-              expect.fail(`Built file ${entry.name} contains forbidden string "${str}"`);
+            // Fail on strings: "CREATE TABLE", "password_hash", "PBKDF2", "sql-wasm"
+            const forbiddenStrings = ['CREATE TABLE', 'password_hash', 'PBKDF2', 'sql-wasm'];
+            for (const str of forbiddenStrings) {
+              if (content.includes(str)) {
+                expect.fail(`Built file ${entry.name} contains forbidden string "${str}"`);
+              }
             }
           }
         }
       }
+
+      scanBuildDir(tempOutDir);
+      expect(true).toBe(true);
+    } finally {
+      // Cleanup temp directory in finally block
+      if (fs.existsSync(tempOutDir)) {
+        try {
+          fs.rmSync(tempOutDir, { recursive: true, force: true });
+        } catch {}
+      }
     }
-
-    scanBuildDir(tempOutDir);
-
-    // Cleanup temp directory on success
-    fs.rmSync(tempOutDir, { recursive: true, force: true });
-    expect(true).toBe(true);
   });
 });

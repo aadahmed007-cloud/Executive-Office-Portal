@@ -1,20 +1,20 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import crypto from 'crypto';
 import { execSync } from 'child_process';
 import { verifyPackageArchive } from '../../scripts/verifyPackage.js';
 
 describe('Offline Package & Manifest Verification (Requirement 3)', () => {
-  const rootDir = process.cwd();
-  const testSandboxDir = path.join(rootDir, '.test_offline_sandbox');
-  const stageDir = path.join(testSandboxDir, 'stage');
-  const archivePath = path.join(testSandboxDir, 'test-package.tar.gz');
+  let testSandboxDir: string;
+  let stageDir: string;
+  let archivePath: string;
 
   beforeAll(() => {
-    if (fs.existsSync(testSandboxDir)) {
-      fs.rmSync(testSandboxDir, { recursive: true, force: true });
-    }
+    testSandboxDir = fs.mkdtempSync(path.join(os.tmpdir(), 'exec-portal-pkg-test-'));
+    stageDir = path.join(testSandboxDir, 'stage');
+    archivePath = path.join(testSandboxDir, 'test-package.tar.gz');
     fs.mkdirSync(stageDir, { recursive: true });
 
     // Populate mock production payload
@@ -32,8 +32,10 @@ describe('Offline Package & Manifest Verification (Requirement 3)', () => {
   });
 
   afterAll(() => {
-    if (fs.existsSync(testSandboxDir)) {
-      fs.rmSync(testSandboxDir, { recursive: true, force: true });
+    if (testSandboxDir && fs.existsSync(testSandboxDir)) {
+      try {
+        fs.rmSync(testSandboxDir, { recursive: true, force: true });
+      } catch {}
     }
   });
 
