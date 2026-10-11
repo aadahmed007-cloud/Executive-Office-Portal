@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
+    "dev": "PREVIEW_MODE=true tsx server.ts",
     "dev:local": "tsx server.ts",
     "server": "tsx server.ts",
     "start": "NODE_ENV=production node dist-server/server.js",
