@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 
 const isProduction = process.env.NODE_ENV === 'production';
 // In AI Studio and Docker container environment, Nginx listens on 8080 and proxies to port 3000
-const PORT = parseInt(process.env.APP_PORT || (process.env.PORT === '8080' ? '3000' : process.env.PORT || '3000'), 10);
+const PORT = parseInt(process.env.APP_PORT || (process.env.PORT === '8080' ? '3000' : process.env.PORT || '3000'), 10);\n// Keep Express private behind the documented reverse proxy unless deployment explicitly requires a container interface.\nconst HOST = process.env.APP_HOST || '127.0.0.1';
 
 export async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
@@ -94,10 +94,10 @@ export async function startServer() {
   }
 
   // 3. Listen on configured PORT (default 3000)
-  const server = app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, HOST, () => {
     console.log(`\n======================================================`);
     console.log(`🚀 Executive Office Portal Server Running on Port ${PORT}`);
-    console.log(`🌐 URL: http://0.0.0.0:${PORT}`);
+    console.log(`🌐 URL: http://${HOST}:${PORT}`);
     console.log(`💾 Storage: ${engineInfo.isMemory ? 'SQLite In-Memory Mode (:memory:)' : `SQLite File-Backed Mode (${engineInfo.journalMode})`}`);
     console.log(`📁 Database: ${engineInfo.absolutePath}`);
     console.log(`📁 API Routes: Mounted at /api/* (JSON 404 for unknown endpoints)`);
