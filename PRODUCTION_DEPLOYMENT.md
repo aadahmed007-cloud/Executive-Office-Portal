@@ -50,6 +50,8 @@
 # بيئة التشغيل
 NODE_ENV=production
 PORT=3000
+# Express binds to loopback behind the local reverse proxy. Set APP_HOST only when container/network isolation requires it.
+APP_HOST=127.0.0.1
 
 # أمان تشفير النسخ الاحتياطي (AES-256-GCM مع اشتقاق scrypt)
 BACKUP_PASSPHRASE=""
