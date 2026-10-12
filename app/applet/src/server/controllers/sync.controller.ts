@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { sqliteEngine } from '../../../../src/data/database/sqliteEngine.js';
+import { sqliteEngine } from '../../../../../src/data/database/sqliteEngine.js';
 
 export class SyncController {
   static getVersion(req: Request, res: Response) {
