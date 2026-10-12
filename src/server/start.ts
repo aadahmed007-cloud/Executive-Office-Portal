@@ -11,7 +11,8 @@ const __dirname = path.dirname(__filename);
 
 const isProduction = process.env.NODE_ENV === 'production';
 // In AI Studio and Docker container environment, Nginx listens on 8080 and proxies to port 3000
-const PORT = parseInt(process.env.APP_PORT || (process.env.PORT === '8080' ? '3000' : process.env.PORT || '3000'), 10);\n// Keep Express private behind the documented reverse proxy unless deployment explicitly requires a container interface.\nconst HOST = process.env.APP_HOST || '127.0.0.1';
+const PORT = parseInt(process.env.APP_PORT || (process.env.PORT === '8080' ? '3000' : process.env.PORT || '3000'), 10);
+// Keep Express private behind the documented reverse proxy unless deployment explicitly requires a container interface.\nconst HOST = process.env.APP_HOST || '127.0.0.1';
 
 export async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
