@@ -75,6 +75,26 @@ export class AuthController {
         return;
       }
 
+      // Check if user account is disabled
+      if (Boolean(userRecord.is_disabled)) {
+        dummyPasswordHash(password);
+        AuthSecurityService.recordFailure(username);
+        await auditRepo.log({
+          user_id: userRecord.id,
+          user_name: userRecord.name,
+          user_role: userRecord.role,
+          action_type: 'AUTH',
+          entity_type: 'LOGIN_FAILURE',
+          entity_id: userRecord.id,
+          before_value: null,
+          after_value: `محاولة تسجيل دخول لحساب معطل للمستخدم (${username})`,
+          ip_address: clientIp
+        }, { userId: userRecord.id, role: userRecord.role, can_view_confidential: Boolean(userRecord.can_view_confidential) });
+
+        res.status(403).json({ error: 'تم تعطيل هذا الحساب. يرجى مراجعة مسؤول النظم' });
+        return;
+      }
+
       // 3. Constant-time password verification on server
       const isValid = verifyPasswordServer(
         password,
@@ -338,7 +358,6 @@ export class AuthController {
   static async getUsers(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const list = await userRepo.getAll(req.userContext!);
-      // If caller is not ADMIN, only return public picker details
       const isFullAdmin = req.user?.role === 'ADMIN';
 
       const sanitized = list.map((u: any) => {

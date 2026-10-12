@@ -44,6 +44,8 @@
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
+The app and API share one origin and the session cookie is SameSite=Strict (so fetch uses credentials 'same-origin').
+
 ---
 
 ## 2. إدارة قواعد البيانات والتخزين الدائم (Persistent Storage & Migrations)

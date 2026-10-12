@@ -28,7 +28,7 @@ function verifyNative(): void {
     console.error(`📌 الخطأ الداخلي: ${err.message}`);
     console.error(`📌 إصدار Node.js الحالي: ${process.version}`);
     console.error(`📌 نظام التشغيل: ${process.platform} | المعمارية: ${process.arch}`);
-    console.error('\n⚠️  تنبيه هام حول بيئة التشغيل المغلقة (Air-Gapped Requirements):');
+    console.error('\n⚠️  تنبيه هام حول بيئة التشغيل دون اتصال (Offline Requirements):');
     console.error('الحزم المجهزة مسبقاً (Prebuilt Binaries) تدعم الأنظمة التالية حصراً:');
     console.error('  - منصات: Linux (glibc/musl), Windows (win32), macOS (darwin)');
     console.error('  - المعماريات: x64 (Intel/AMD 64-bit), arm64 (ARM 64-bit)');

@@ -1435,14 +1435,15 @@ export class SqliteUserRepository implements IUserRepository {
     }
 
     const isFullAdmin = ctx.role === 'ADMIN';
-    const rows = sqliteEngine.query<any>('SELECT id, username, name, title, department_id, email, role, can_view_confidential, must_change_password, avatar, created_at FROM users ORDER BY name ASC');
+    const rows = sqliteEngine.query<any>('SELECT id, username, name, title, department_id, email, role, can_view_confidential, must_change_password, is_disabled, avatar, created_at FROM users ORDER BY name ASC');
 
     return rows.map((u) => {
       if (isFullAdmin) {
         return {
           ...u,
           can_view_confidential: Boolean(u.can_view_confidential),
-          must_change_password: Boolean(u.must_change_password)
+          must_change_password: Boolean(u.must_change_password),
+          is_disabled: Boolean(u.is_disabled)
         };
       }
       return {
@@ -1455,6 +1456,7 @@ export class SqliteUserRepository implements IUserRepository {
         role: u.role,
         can_view_confidential: false,
         must_change_password: false,
+        is_disabled: Boolean(u.is_disabled),
         avatar: u.avatar,
         created_at: u.created_at
       };
@@ -1465,7 +1467,7 @@ export class SqliteUserRepository implements IUserRepository {
     if (!can(ctx, 'read', 'users')) {
       throw new SecurityAuthorizationError('غير مصرح بالاطلاع على بيانات المستخدم');
     }
-    const rows = sqliteEngine.query<any>('SELECT id, username, name, title, department_id, email, role, can_view_confidential, must_change_password, avatar, created_at FROM users WHERE id = ?', [id]);
+    const rows = sqliteEngine.query<any>('SELECT id, username, name, title, department_id, email, role, can_view_confidential, must_change_password, is_disabled, avatar, created_at FROM users WHERE id = ?', [id]);
     if (!rows[0]) return null;
 
     const u = rows[0];
@@ -1474,18 +1476,20 @@ export class SqliteUserRepository implements IUserRepository {
     return {
       ...u,
       can_view_confidential: isFullAdmin ? Boolean(u.can_view_confidential) : false,
-      must_change_password: isFullAdmin ? Boolean(u.must_change_password) : false
+      must_change_password: isFullAdmin ? Boolean(u.must_change_password) : false,
+      is_disabled: Boolean(u.is_disabled)
     };
   }
 
-  async getByUsername(username: string): Promise<(User & { password_hash: string; password_salt: string }) | null> {
+  async getByUsername(username: string): Promise<(User & { password_hash: string; password_salt: string; is_disabled?: boolean }) | null> {
     const rows = sqliteEngine.query<any>('SELECT * FROM users WHERE LOWER(username) = LOWER(?)', [username.trim()]);
     if (!rows[0]) return null;
     const u = rows[0];
     return {
       ...u,
       can_view_confidential: Boolean(u.can_view_confidential),
-      must_change_password: Boolean(u.must_change_password)
+      must_change_password: Boolean(u.must_change_password),
+      is_disabled: Boolean(u.is_disabled)
     };
   }
 
@@ -1493,11 +1497,12 @@ export class SqliteUserRepository implements IUserRepository {
     if (!can(ctx, 'read', 'users')) {
       throw new SecurityAuthorizationError('غير مصرح بالاطلاع على المستخدمين');
     }
-    const rows = sqliteEngine.query<any>('SELECT id, username, name, title, department_id, email, role, can_view_confidential, must_change_password, avatar, created_at FROM users WHERE role = ?', [role]);
+    const rows = sqliteEngine.query<any>('SELECT id, username, name, title, department_id, email, role, can_view_confidential, must_change_password, is_disabled, avatar, created_at FROM users WHERE role = ?', [role]);
     return rows.map((u) => ({
       ...u,
       can_view_confidential: Boolean(u.can_view_confidential),
-      must_change_password: Boolean(u.must_change_password)
+      must_change_password: Boolean(u.must_change_password),
+      is_disabled: Boolean(u.is_disabled)
     }));
   }
 
@@ -1506,6 +1511,91 @@ export class SqliteUserRepository implements IUserRepository {
       throw new SecurityAuthorizationError('غير مصرح لتحديث كلمة مرور حساب آخر');
     }
     sqliteEngine.run('UPDATE users SET password_hash = ?, password_salt = ?, must_change_password = 0 WHERE id = ?', [hash, salt, userId]);
+  }
+
+  async create(data: Omit<User, 'id' | 'created_at'> & { password_hash: string; password_salt: string }, ctx: UserContext): Promise<User> {
+    if (!can(ctx, 'create', 'users')) {
+      throw new SecurityAuthorizationError('غير مصرح لغير مسؤول النظم بإنشاء حسابات مستخدمين جديدة');
+    }
+
+    const id = `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const now = new Date().toISOString();
+    const canViewConf = data.can_view_confidential ? 1 : 0;
+    const mustChange = data.must_change_password ? 1 : 1; // Always 1 for newly created users
+    const isDisabled = data.is_disabled ? 1 : 0;
+
+    sqliteEngine.run(
+      `INSERT INTO users (id, username, name, title, department_id, email, role, can_view_confidential, password_hash, password_salt, must_change_password, is_disabled, avatar, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        data.username.trim().toLowerCase(),
+        data.name.trim(),
+        data.title.trim(),
+        data.department_id || 'dept-exec',
+        data.email.trim().toLowerCase(),
+        data.role,
+        canViewConf,
+        data.password_hash,
+        data.password_salt,
+        mustChange,
+        isDisabled,
+        data.avatar || null,
+        now
+      ]
+    );
+
+    return (await this.getById(id, ctx))!;
+  }
+
+  async update(
+    id: string,
+    data: Partial<Pick<User, 'name' | 'title' | 'email' | 'role' | 'can_view_confidential' | 'is_disabled'>>,
+    ctx: UserContext
+  ): Promise<User> {
+    if (!can(ctx, 'update', 'users')) {
+      throw new SecurityAuthorizationError('غير مصرح بتعديل بيانات المستخدمين');
+    }
+
+    const current = await this.getById(id, ctx);
+    if (!current) {
+      throw new Error('المستخدم غير موجود');
+    }
+
+    const updates: string[] = [];
+    const params: any[] = [];
+
+    if (data.name !== undefined) {
+      updates.push('name = ?');
+      params.push(data.name.trim());
+    }
+    if (data.title !== undefined) {
+      updates.push('title = ?');
+      params.push(data.title.trim());
+    }
+    if (data.email !== undefined) {
+      updates.push('email = ?');
+      params.push(data.email.trim().toLowerCase());
+    }
+    if (data.role !== undefined) {
+      updates.push('role = ?');
+      params.push(data.role);
+    }
+    if (data.can_view_confidential !== undefined) {
+      updates.push('can_view_confidential = ?');
+      params.push(data.can_view_confidential ? 1 : 0);
+    }
+    if (data.is_disabled !== undefined) {
+      updates.push('is_disabled = ?');
+      params.push(data.is_disabled ? 1 : 0);
+    }
+
+    if (updates.length > 0) {
+      params.push(id);
+      sqliteEngine.run(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params);
+    }
+
+    return (await this.getById(id, ctx))!;
   }
 }
 

@@ -4,11 +4,11 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "PREVIEW_MODE=true tsx server.ts",
+    "dev": "tsx server.ts",
     "dev:local": "tsx server.ts",
     "server": "tsx server.ts",
-    "start": "NODE_ENV=production node dist-server/server.js",
-    "build:server": "esbuild server.ts --platform=node --bundle --format=esm --packages=external --outfile=dist-server/server.js && esbuild scripts/verifyNative.ts --platform=node --bundle --format=esm --packages=external --outfile=dist-server/verifyNative.js && esbuild scripts/backup.ts --platform=node --bundle --format=esm --packages=external --outfile=dist-server/backup.js && esbuild scripts/verifyPackage.ts --platform=node --bundle --format=esm --packages=external --outfile=dist-server/verifyPackage.js",
+    "start": "node dist-server/server.js",
+    "build:server": "esbuild server.ts --platform=node --bundle --format=esm --packages=external --banner:js=\"if (!process.env.NODE_ENV) process.env.NODE_ENV = 'production';\" --outfile=dist-server/server.js && esbuild scripts/verifyNative.ts --platform=node --bundle --format=esm --packages=external --outfile=dist-server/verifyNative.js && esbuild scripts/backup.ts --platform=node --bundle --format=esm --packages=external --banner:js=\"if (!process.env.NODE_ENV) process.env.NODE_ENV = 'production';\" --outfile=dist-server/backup.js && esbuild scripts/verifyPackage.ts --platform=node --bundle --format=esm --packages=external --outfile=dist-server/verifyPackage.js",
     "verify:native": "node dist-server/verifyNative.js",
     "verify:native:dev": "tsx scripts/verifyNative.ts",
     "package:offline": "tsx scripts/packageOffline.ts",
@@ -29,7 +29,7 @@
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "check": "npm run typecheck && npm run test && npm run build && npm run smoke:package",
-    "clean": "rm -rf dist dist-server release .test_smoke_pkg* .test_offline_sandbox"
+    "clean": "node scripts/clean.mjs"
   },
   "dependencies": {
     "better-sqlite3": "13.0.3",

@@ -20,24 +20,29 @@ import { ContactsView } from '../../features/contacts/ContactsView';
 import { AuditLogView } from '../../features/audit/AuditLogView';
 import { NotificationsView } from '../../features/notifications/NotificationsView';
 import { WeeklySummaryView } from '../../features/reports/WeeklySummaryView';
+import { UsersManagementView } from '../../features/auth/UsersManagementView';
 
 export const MainLayout: React.FC = () => {
   const { currentUser, isAuthenticated, isLocked, mustChangePasswordPrompt } = useAuth();
   const { dir } = useI18n();
 
   // Active view tab state (default changes based on role)
-  const [activeTab, setActiveTab] = useState<string>(() =>
-    currentUser?.role === 'CHAIRMAN' ? 'dashboard_chairman' : 'dashboard_secretary'
-  );
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (currentUser?.role === 'CHAIRMAN') return 'dashboard_chairman';
+    if (currentUser?.role === 'ADMIN') return 'settings';
+    return 'dashboard_secretary';
+  });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   // If role switches or user logs in, adjust default dashboard
   React.useEffect(() => {
-    if (currentUser?.role === 'CHAIRMAN' && activeTab === 'dashboard_secretary') {
+    if (currentUser?.role === 'CHAIRMAN' && (activeTab === 'dashboard_secretary' || activeTab === 'settings')) {
       setActiveTab('dashboard_chairman');
-    } else if (currentUser?.role === 'SECRETARY' && activeTab === 'dashboard_chairman') {
+    } else if (currentUser?.role === 'SECRETARY' && (activeTab === 'dashboard_chairman' || activeTab === 'settings')) {
       setActiveTab('dashboard_secretary');
+    } else if (currentUser?.role === 'ADMIN' && (activeTab === 'dashboard_chairman' || activeTab === 'dashboard_secretary')) {
+      setActiveTab('settings');
     }
   }, [currentUser?.role]);
 
@@ -80,14 +85,34 @@ export const MainLayout: React.FC = () => {
           {activeTab === 'notifications' && <NotificationsView />}
           {activeTab === 'reports' && <WeeklySummaryView />}
           {activeTab === 'settings' && (
-            <div className="bg-white p-6 rounded-2xl border border-slate-200">
-              <h2 className="text-lg font-bold mb-4">إعدادات النظام وإدارة قاعدة البيانات</h2>
-              <button
-                onClick={() => setIsSettingsOpen(true)}
-                className="px-4 py-2 bg-emerald-700 text-white rounded-xl text-xs font-bold"
-              >
-                فتح نافذة إدارة SQLite والنسخ الاحتياطي
-              </button>
+            <div className="space-y-6">
+              {currentUser.role === 'ADMIN' ? (
+                <>
+                  <UsersManagementView />
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 flex items-center justify-between">
+                    <div>
+                      <h2 className="text-base font-bold text-slate-900">إدارة قاعدة البيانات والنسخ الاحتياطي</h2>
+                      <p className="text-xs text-slate-500 mt-0.5">إدارة تفضيلات العرض وتصدير واستعادة النسخ الاحتياطية لقاعدة البيانات</p>
+                    </div>
+                    <button
+                      onClick={() => setIsSettingsOpen(true)}
+                      className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition cursor-pointer"
+                    >
+                      إدارة SQLite والنسخ الاحتياطي
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="bg-white p-6 rounded-2xl border border-slate-200">
+                  <h2 className="text-lg font-bold mb-4">إعدادات النظام وإدارة قاعدة البيانات</h2>
+                  <button
+                    onClick={() => setIsSettingsOpen(true)}
+                    className="px-4 py-2 bg-emerald-700 text-white rounded-xl text-xs font-bold"
+                  >
+                    فتح نافذة إدارة SQLite والنسخ الاحتياطي
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </main>

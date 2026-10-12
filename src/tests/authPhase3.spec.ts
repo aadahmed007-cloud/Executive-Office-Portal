@@ -298,7 +298,8 @@ describe('Phase 3: Server-Side Authorization & Confidentiality Enforcement', () 
         '/auth/me',
         '/auth/logout',
         '/auth/change-password',
-        '/auth/reauth'
+        '/auth/reauth',
+        '/sync/version'
       ].includes(route.path);
       
       if (isSessionRoute) continue; // skip general session routes

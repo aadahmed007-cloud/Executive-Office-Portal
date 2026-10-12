@@ -25,8 +25,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
   const { t } = useI18n();
 
   const isChairman = currentUser?.role === 'CHAIRMAN';
+  const isAdmin = currentUser?.role === 'ADMIN';
 
   // Navigation items tailored to roles
+  const adminNav = [
+    { id: 'settings', label: 'إدارة المستخدمين والنظام', icon: SlidersHorizontal, badge: undefined },
+    { id: 'audit_log', label: t('nav.audit_log'), icon: ScrollText, badge: undefined }
+  ];
+
   const secretaryNav = [
     { id: 'dashboard_secretary', label: t('nav.dashboard_secretary'), icon: LayoutDashboard },
     { id: 'correspondence', label: t('nav.correspondence'), icon: Inbox, badge: '20' },
@@ -49,17 +55,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
     { id: 'audit_log', label: 'سجل الرقابة الرئاسي', icon: Shield }
   ];
 
-  const items = isChairman ? chairmanNav : secretaryNav;
+  const items = isChairman ? chairmanNav : isAdmin ? adminNav : secretaryNav;
 
   return (
     <nav className="w-full md:w-64 bg-slate-900/95 border-b md:border-b-0 md:border-l border-slate-800 flex-shrink-0 p-3 md:p-4">
       {/* Role banner inside sidebar */}
       <div className="mb-4 pb-3 border-b border-slate-800">
         <div className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-          {isChairman ? 'بوابة القرار الرئاسي' : 'وحدات إدارة المكتب'}
+          {isChairman ? 'بوابة القرار الرئاسي' : isAdmin ? 'إدارة النظم والشبكات' : 'وحدات إدارة المكتب'}
         </div>
         <div className="text-xs text-emerald-400 font-medium mt-0.5">
-          {isChairman ? 'رئيس مجلس الإدارة' : 'السكرتارية التنفيذية'}
+          {isChairman ? 'رئيس مجلس الإدارة' : isAdmin ? 'مسؤول النظم (IT)' : 'السكرتارية التنفيذية'}
         </div>
       </div>
 
@@ -108,9 +114,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
         <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 text-[11px] text-slate-400">
           <div className="font-semibold text-slate-300 flex items-center gap-1.5 mb-1">
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            نظام محلي آمن ومغلق
+            نظام محلي متصل بالخادم
           </div>
-          <div>قاعدة بيانات SQLite WASM داخل المتصفح مع حفظ تلقائي بـ IndexedDB.</div>
+          <div>خادم Express وقاعدة بيانات SQLite WAL على الخادم عبر الشبكة المحلية.</div>
         </div>
       </div>
     </nav>

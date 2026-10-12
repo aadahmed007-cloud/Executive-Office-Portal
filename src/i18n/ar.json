@@ -3,8 +3,8 @@
     "title": "مكتب مساعد رئيس مجلس الإدارة",
     "authority": "الهيئة القومية للبريد المصري",
     "subtitle": "المنظومة التنفيذية لإدارة المراسلات والاجتماعات والتكليفات الرئاسية",
-    "version": "1.0.0 (نواة محلية مغلقة - SQLite WASM)",
-    "offline_badge": "محلي 100% - لا اتصال خارجي"
+    "version": "1.0.0 Release Candidate (pending independent security review and IT approval)",
+    "offline_badge": "محلي - لا اتصال خارجي"
   },
   "nav": {
     "dashboard_chairman": "لوحة الرئيس التنفيذية",
@@ -44,7 +44,7 @@
     "top_secret": "سري للغاية",
     "masked_title": "[معاملة سرية - محجوبة بقرار رئاسي]",
     "masked_summary": "محتوى هذه المعاملة مصنف بدرجة سرية عالية ومقتصر على المصرح لهم فقط.",
-    "masked_entity": "[جهة سيادية / سرية]",
+    "masked_entity": "[جهة رسمية / سرية]",
     "access_denied": "عذراً، هذا السجل يتطلب تصريحاً أمنياً للاطلاع."
   },
   "priority": {
@@ -99,7 +99,7 @@
     "due_date": "تاريخ الاستحقاق",
     "details": "التفاصيل",
     "loading_db": "جاري تحميل وتجهيز محرك SQLite المحلي...",
-    "db_ready": "قاعدة بيانات SQLite المحلية جاهزة ومحفوظة بـ IndexedDB",
+    "db_ready": "قاعدة بيانات الخادم (better-sqlite3 WAL) جاهزة ومتصلة",
     "records_count": "إجمالي السجلات:",
     "export_pdf": "طباعة / تصدير رسمي (PDF)",
     "no_records": "لا توجد سجلات مطابقة في الوقت الحالي.",
@@ -191,7 +191,7 @@
     "category_operations": "تشغيلي وخدمات بريدية",
     "category_legal": "قانوني وحوكمة",
     "category_technology": "تحول رقمي وتكنولوجيا",
-    "category_sovereign": "علاقات سيادية وحكومية",
+    "category_sovereign": "علاقات حكومية ومؤسسية",
     "category_projects": "مشروعات وأصول عقارية",
     "category_citizens": "خدمة المواطنين وتظلمات",
     "tags_label": "الوسوم والتصنيفات الدلالية",

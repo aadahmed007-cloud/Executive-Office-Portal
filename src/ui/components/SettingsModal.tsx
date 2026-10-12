@@ -86,9 +86,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
             <div className="flex items-center gap-3">
               <HardDrive className="w-6 h-6 text-emerald-400" />
               <div>
-                <div className="text-sm font-semibold text-slate-200">محرك قاعدة البيانات: SQLite 3.x (WASM)</div>
+                <div className="text-sm font-semibold text-slate-200">محرك قاعدة البيانات: SQLite 3.x (better-sqlite3)</div>
                 <div className="text-xs text-slate-400">
-                  الحفظ المحلي: <span className="text-emerald-400 font-mono">IndexedDB (chairmans_office_idb)</span>
+                  التخزين المركزي: <span className="text-emerald-400 font-mono">Server-side SQLite WAL Mode</span>
                 </div>
               </div>
             </div>
@@ -282,7 +282,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                   الملف المصدّر (<code>.sqlite</code>) يحتوي على قاعدة البيانات كاملة بما في ذلك كافة المعاملات والخطابات المصنفة بدرجة <strong>«سري»</strong> و <strong>«سري للغاية»</strong> دون أي حجب برمجي.
                 </p>
                 <p className="text-[11px] text-amber-400 font-mono">
-                  * ملاحظة فنية: في بيئات المتصفح، الحجب يتم على مستوى العرض فقط. الحماية السيادية الحقيقية ضد تسريب الملفات تتطلب خادماً خلفياً مشفراً مع قصر التصدير على واجهات محددة.
+                  * ملاحظة فنية: الحماية المتقدمة لسرية الملفات تتطلب قصر التصدير والوصول على الواجهات المصرح بها في الخادم.
                 </p>
                 <div className="flex justify-end gap-2 pt-1">
                   <button

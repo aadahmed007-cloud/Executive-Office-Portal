@@ -1,4 +1,4 @@
-# دليل التثبيت والتشغيل الشامل دون اتصال بالإنترنت (Offline Air-Gapped Installation Guide)
+# دليل التثبيت والتشغيل الشامل دون اتصال بالإنترنت (Offline Installation Guide)
 ## بوابة مكتب رئيس مجلس الإدارة — الهيئة القومية للبريد المصري
 ### وثيقة إجراءات التشغيل القياسية لمسؤولي تكنولوجيا المعلومات وأمن المعلومات (IT & Security Operations)
 
@@ -333,12 +333,38 @@ schtasks /create /tn "ExecutivePortal_MonthlyRestoreTest" `
    ```
 
 2. **نقل ملفات قاعدة البيانات المتضررة وملفات السجلات الجانبية (WAL/SHM) جانباً دون حذفها:**
+
+   **على نظام Linux:**
    ```bash
-   # إنشاء مجلد عزل آمن ونقل كافة الملفات السابقة للاحتفاظ بها كإجراء احترازي
-   sudo mkdir -p /var/lib/executive_portal/data/damaged_$(date +%Y%m%d%H%M%S)
-   sudo mv /var/lib/executive_portal/data/app.db* /var/lib/executive_portal/data/damaged_$(date +%Y%m%d%H%M%S)/ 2>/dev/null || true
-   # على Windows:
-   # move C:\ExecutivePortal\data\app.db* C:\ExecutivePortal\data\damaged_archive\
+   set -e
+   DATA_DIR="/var/lib/executive_portal/data"
+   TS=$(date +%Y%m%d%H%M%S)
+   DAMAGED_DIR="$DATA_DIR/damaged_$TS"
+
+   sudo mkdir -p "$DAMAGED_DIR"
+   for f in app.db app.db-wal app.db-shm; do
+     if [ -f "$DATA_DIR/$f" ]; then
+       sudo mv "$DATA_DIR/$f" "$DAMAGED_DIR/"
+     fi
+   done
+
+   # إثبات النقل وعرض الملفات المعزولة كدليل
+   ls -la "$DAMAGED_DIR"
+   ```
+
+   **على نظام Windows (PowerShell) *(لم يخضع لاختبارات أجهزة فعلية من قِبل المطورين - not yet tested by the authors)*:**
+   ```powershell
+   $ErrorActionPreference = "Stop"
+   $DATA_DIR = "D:\ExecutivePortalData\data"
+   $TS = Get-Date -Format "yyyyMMddHHmmss"
+   $DAMAGED_DIR = Join-Path $DATA_DIR "damaged_$TS"
+
+   Stop-Service -Name "ExecutivePortalService"
+   New-Item -ItemType Directory -Path $DAMAGED_DIR -Force
+   Get-ChildItem -Path $DATA_DIR -Filter "app.db*" | Move-Item -Destination $DAMAGED_DIR -ErrorAction Stop
+
+   # إثبات النقل وعرض الملفات المعزولة كدليل
+   Get-ChildItem -Path $DAMAGED_DIR
    ```
 
 3. **فك تشفير النسخة الاحتياطية المستهدفة والتحقق منها إلى مسار جديد مستقل (NEW path):**
@@ -450,7 +476,8 @@ sudo systemctl status executive-portal
 - [ ] **3. هيئة الشهادات الرقمية:** توفير شهادة TLS داخلية معتمدة على الخادم والبروكسي.
 - [ ] **4. وسيط النسخ الاحتياطي الخارجي:** توفير قرص تخزين مشفر مستقل للنسخ اليومي.
 - [ ] **5. المراجعة الأمنية المستقلة:** الترتيب لإجراء تقييم أمني واختبار اختراق مستقل.
+- [ ] **6. تأكيد الملكية القانونية والترخيص:** تأكيد ملكية الكود وشروط الترخيص مع الإدارة القانونية للهيئة (confirm code ownership and license terms with the Authority's legal department).
 
 ---
-**تاريخ التوثيق:** أكتوبر 2026 | **الإصدار:** 1.0.0 Production Release | **الجهة:** قطاع تكنولوجيا المعلومات — الهيئة القومية للبريد المصري
+**تاريخ التوثيق:** أكتوبر 2026 | **الإصدار:** 1.0.0 Release Candidate (pending independent security review and IT approval) | **الجهة:** قطاع تكنولوجيا المعلومات — الهيئة القومية للبريد المصري
 

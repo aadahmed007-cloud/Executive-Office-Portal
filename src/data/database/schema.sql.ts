@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   password_salt TEXT NOT NULL,
   must_change_password INTEGER DEFAULT 0,
+  is_disabled INTEGER DEFAULT 0,
   avatar TEXT,
   created_at TEXT NOT NULL
 );
@@ -293,17 +294,17 @@ CREATE TABLE IF NOT EXISTS audit_log (
   is_confidential INTEGER DEFAULT 0
 );
 
--- Audit log immutability triggers: Append-Only
+-- Audit log tamper-evident protection triggers: Append-Only
 CREATE TRIGGER IF NOT EXISTS trg_audit_log_prevent_update
 BEFORE UPDATE ON audit_log
 BEGIN
-  SELECT RAISE(ABORT, 'سجل الرقابة والتدقيق غير قابل للتعديل نهائياً');
+  SELECT RAISE(ABORT, 'سجل الرقابة والتدقيق محمي لكشف التلاعب ولا يسمح بتعديل قيوده');
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_audit_log_prevent_delete
 BEFORE DELETE ON audit_log
 BEGIN
-  SELECT RAISE(ABORT, 'سجل الرقابة والتدقيق غير قابل للحذف نهائياً');
+  SELECT RAISE(ABORT, 'سجل الرقابة والتدقيق محمي لكشف التلاعب ولا يسمح بحذف قيوده');
 END;
 
 CREATE TABLE IF NOT EXISTS settings (

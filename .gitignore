@@ -7,7 +7,7 @@ node_modules/
 /dist-temp/
 /release/
 /.test_*/
-/.temp_pkg_verify_*/
+/.temp_*/
 /.stage/
 /coverage/
 /build/

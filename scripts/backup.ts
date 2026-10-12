@@ -8,6 +8,9 @@
  * - Retention rotation (keeps last N backups, protecting latest verified backup).
  * - Standalone CLI commands for verify (--verify <file>) and restore testing (--restore-test <file>).
  */
+if (!process.env.NODE_ENV) {
+  process.env.NODE_ENV = 'production';
+}
 
 import 'dotenv/config';
 import path from 'path';

@@ -17,7 +17,7 @@ export async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
 
   if (!isProd) {
-    process.env.PREVIEW_MODE = process.env.PREVIEW_MODE || 'true';
+    process.env.PREVIEW_MODE = 'true';
   }
 
   // 1. Initialize local SQLite engine & seed default users

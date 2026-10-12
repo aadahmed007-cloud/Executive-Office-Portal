@@ -220,6 +220,15 @@ export class SqliteEngine {
     return tx();
   }
 
+  public incrementVersion(isConfidential: boolean): void {
+    const db = this.getDatabase();
+    if (isConfidential) {
+      db.prepare('UPDATE change_versions SET confidential_version = confidential_version + 1 WHERE id = 1').run();
+    } else {
+      db.prepare('UPDATE change_versions SET non_confidential_version = non_confidential_version + 1 WHERE id = 1').run();
+    }
+  }
+
   public async saveImmediate(): Promise<void> {
     // In WAL mode with better-sqlite3, writes are flushed directly to disk
     return Promise.resolve();
@@ -272,6 +281,29 @@ export class SqliteEngine {
       this.db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(1, new Date().toISOString());
     }
 
+    // Migration 2: Add is_disabled to users if upgrading
+    if (!appliedVersions.has(2)) {
+      const userColumns = this.query<{ name: string }>("PRAGMA table_info(users)");
+      const colNames = new Set(userColumns.map((c) => c.name));
+      if (!colNames.has('is_disabled')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN is_disabled INTEGER DEFAULT 0');
+      }
+      this.db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(2, new Date().toISOString());
+    }
+
+    // Migration 3: Add change_versions mechanism
+    if (!appliedVersions.has(3)) {
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS change_versions (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          non_confidential_version INTEGER NOT NULL DEFAULT 0,
+          confidential_version INTEGER NOT NULL DEFAULT 0
+        );
+        INSERT OR IGNORE INTO change_versions (id, non_confidential_version, confidential_version) VALUES (1, 0, 0);
+      `);
+      this.db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(3, new Date().toISOString());
+    }
+
     // Seed data only on fresh empty database
     const userCountRows = this.query<{ count: number }>('SELECT count(*) as count FROM users');
     const existingUserCount = userCountRows[0]?.count || 0;
@@ -304,7 +336,7 @@ export class SqliteEngine {
       }
 
       const userStmt = this.db!.prepare(
-        'INSERT OR IGNORE INTO users (id, username, name, title, department_id, email, role, can_view_confidential, password_hash, password_salt, must_change_password, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT OR IGNORE INTO users (id, username, name, title, department_id, email, role, can_view_confidential, password_hash, password_salt, must_change_password, is_disabled, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
 
       for (const u of INITIAL_USERS) {
@@ -336,7 +368,8 @@ export class SqliteEngine {
           u.can_view_confidential,
           passHash,
           passSalt,
-          isTestEnv ? u.must_change_password : 1,
+          1,
+          0,
           u.avatar,
           u.created_at
         );

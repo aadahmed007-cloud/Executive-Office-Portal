@@ -42,7 +42,7 @@ export const ContactsView: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
             <Users2 className="w-5 h-5 text-emerald-700" />
-            <span>{t('nav.contacts')} والجهات السيادية</span>
+            <span>{t('nav.contacts')} والجهات الحكومية والرسمية</span>
           </h2>
           <p className="text-xs text-slate-500 mt-1">
             دليل الشخصيات العامة والوزراء والجهات المتعاملة مع مكتب رئيس مجلس الإدارة

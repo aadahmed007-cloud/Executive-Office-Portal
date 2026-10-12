@@ -233,7 +233,7 @@ export const AuditLogView: React.FC = () => {
               <h4 className="font-bold text-sm flex items-center gap-2">
                 <span>
                   {integrityResult.isValid
-                    ? 'سلسلة التشفير سليمة وموثقة بالكامل 100% (Cryptographic Chain Valid)'
+                    ? 'سلسلة التشفير سليمة وموثقة بالكامل (Cryptographic Chain Valid)'
                     : 'تنبيه أمني: تم رصد عدم تطابق في سلسلة الرقابة (Integrity Breach Detected)'}
                 </span>
               </h4>

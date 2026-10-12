@@ -48,6 +48,10 @@ describe('Environment Variables & Docs Contract Validation', () => {
         if (entry.isDirectory()) {
           scan(full);
         } else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.js'))) {
+          // Ignore test files which may reference system env vars for isolated test environments
+          if (entry.name.includes('.spec.') || entry.name.includes('.test.')) {
+            continue;
+          }
           const content = fs.readFileSync(full, 'utf8');
           const matches = content.matchAll(/process\.env\.([A-Z0-9_]+)/g);
           for (const m of matches) {

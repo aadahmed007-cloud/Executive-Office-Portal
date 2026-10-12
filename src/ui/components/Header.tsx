@@ -127,7 +127,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings, activeTab, setAc
           {/* User Profile Capsule */}
           <div className="hidden lg:flex items-center gap-2.5 pl-2 pr-3 py-1.5 rounded-xl bg-emerald-900/50 border border-emerald-800/70">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-amber-600 to-amber-400 text-slate-950 font-bold flex items-center justify-center text-xs shadow">
-              {currentUser.role === 'CHAIRMAN' ? 'ر' : 'س'}
+              {currentUser.role === 'CHAIRMAN' ? 'ر' : currentUser.role === 'ADMIN' ? 'م' : 'س'}
             </div>
             <div className="text-right">
               <div className="text-xs font-semibold text-slate-100 leading-tight">{currentUser.name}</div>

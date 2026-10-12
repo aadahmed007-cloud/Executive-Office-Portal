@@ -8,11 +8,13 @@ import { ContactsController } from '../controllers/contacts.controller.js';
 import { NotificationsController } from '../controllers/notifications.controller.js';
 import { AuditController } from '../controllers/audit.controller.js';
 import { SettingsController } from '../controllers/settings.controller.js';
+import { AdminUsersController } from '../controllers/adminUsers.controller.js';
 import {
   requireAuth,
   csrfProtection,
   mustChangePasswordGuard,
-  rbacGuard
+  rbacGuard,
+  requireRole
 } from '../middleware/auth.middleware.js';
 import { PermissionAction, PermissionResource } from '../security/permissions.js';
 
@@ -24,6 +26,7 @@ export interface DeclarativeRoute {
   mustChangePassword: boolean; // if true, blocked if must_change_password is true
   resource?: PermissionResource;
   action?: PermissionAction;
+  requireAdmin?: boolean;
 }
 
 export const DECLARATIVE_ROUTES: DeclarativeRoute[] = [
@@ -37,8 +40,16 @@ export const DECLARATIVE_ROUTES: DeclarativeRoute[] = [
   { method: 'post', path: '/auth/change-password', handler: AuthController.changePassword, requireAuth: true, mustChangePassword: false },
   { method: 'post', path: '/auth/reauth', handler: AuthController.reauth, requireAuth: true, mustChangePassword: false },
 
-  // 3. Users Management
+  // 3. Users Management (Public Pickers)
   { method: 'get', path: '/users', handler: AuthController.getUsers, requireAuth: true, mustChangePassword: true, resource: 'users', action: 'read' },
+
+  // 3b. Admin Users Management (Full lifecycle - ADMIN only)
+  { method: 'get', path: '/admin/users', handler: AdminUsersController.listUsers, requireAuth: true, mustChangePassword: true, resource: 'users', action: 'read', requireAdmin: true },
+  { method: 'post', path: '/admin/users', handler: AdminUsersController.createUser, requireAuth: true, mustChangePassword: true, resource: 'users', action: 'create', requireAdmin: true },
+  { method: 'patch', path: '/admin/users/:id', handler: AdminUsersController.updateUser, requireAuth: true, mustChangePassword: true, resource: 'users', action: 'update', requireAdmin: true },
+  { method: 'post', path: '/admin/users/:id/disable', handler: AdminUsersController.disableUser, requireAuth: true, mustChangePassword: true, resource: 'users', action: 'disable', requireAdmin: true },
+  { method: 'post', path: '/admin/users/:id/enable', handler: AdminUsersController.enableUser, requireAuth: true, mustChangePassword: true, resource: 'users', action: 'update', requireAdmin: true },
+  { method: 'post', path: '/admin/users/:id/reset-password', handler: AdminUsersController.resetPassword, requireAuth: true, mustChangePassword: true, resource: 'users', action: 'update', requireAdmin: true },
 
   // 4. Meetings
   { method: 'get', path: '/meetings', handler: MeetingsController.getAll, requireAuth: true, mustChangePassword: true, resource: 'meetings', action: 'read' },
@@ -115,7 +126,9 @@ export const DECLARATIVE_ROUTES: DeclarativeRoute[] = [
 
   // 11. Settings
   { method: 'get', path: '/settings', handler: SettingsController.getSettings, requireAuth: true, mustChangePassword: true, resource: 'settings', action: 'read' },
-  { method: 'patch', path: '/settings', handler: SettingsController.updateSettings, requireAuth: true, mustChangePassword: true, resource: 'settings', action: 'update' }
+  { method: 'patch', path: '/settings', handler: SettingsController.updateSettings, requireAuth: true, mustChangePassword: true, resource: 'settings', action: 'update' },
+  // 12. Sync Version
+  { method: 'get', path: '/sync/version', handler: SettingsController.getVersion, requireAuth: true, mustChangePassword: true }
 ];
 
 export const apiRouter = Router();
@@ -137,6 +150,10 @@ DECLARATIVE_ROUTES.forEach((route) => {
 
   if (route.resource && route.action) {
     middlewares.push(rbacGuard(route.resource, route.action));
+  }
+
+  if (route.requireAdmin) {
+    middlewares.push(requireRole(['ADMIN']));
   }
 
   // Register route in Express Router

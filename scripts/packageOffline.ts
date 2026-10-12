@@ -1,6 +1,6 @@
 /**
  * Offline Package Builder for Executive Office Portal
- * Produces an air-gapped production package with prebuilt native binaries, compiled server, and cryptographic MANIFEST.json.
+ * Produces an offline package with prebuilt native binaries, compiled server, and cryptographic MANIFEST.json.
  */
 
 import fs from 'fs';

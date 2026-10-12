@@ -15,6 +15,7 @@ export interface User {
   can_view_confidential: boolean;
   avatar?: string;
   must_change_password?: boolean;
+  is_disabled?: boolean;
   created_at: string;
 }
 

@@ -17,7 +17,7 @@ export function maskConfidentialCorrespondence(item: Correspondence, user: User)
     ...item,
     subject: '[معاملة سرية - محجوبة بقرار رئاسي]',
     summary: 'محتوى هذه المعاملة مصنف بدرجة سرية عالية ومقتصر على المصرح لهم رسمياً.',
-    source_or_dest_entity: '[جهة سيادية / محجوبة]'
+    source_or_dest_entity: '[جهة رسمية / محجوبة]'
   };
 }
 

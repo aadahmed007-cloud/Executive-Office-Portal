@@ -160,7 +160,7 @@ export const MeetingsView: React.FC = () => {
                 : type === 'board'
                 ? 'مجلس الإدارة'
                 : type === 'ministerial'
-                ? 'لقاءات وزارية وسيادية'
+                ? 'لقاءات وزارية ورسمية'
                 : type === 'external_entity'
                 ? 'جهات خارجية'
                 : 'اجتماعات داخلية'}
@@ -342,7 +342,7 @@ export const MeetingsView: React.FC = () => {
                   >
                     <option value="internal">اجتماع داخلي</option>
                     <option value="board">جلسة مجلس إدارة</option>
-                    <option value="ministerial">لقاء وزاري وسيادي</option>
+                    <option value="ministerial">لقاء وزاري ورسمي</option>
                     <option value="external_entity">جهات خارجية</option>
                   </select>
                 </div>

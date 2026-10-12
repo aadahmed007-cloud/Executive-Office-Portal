@@ -15,7 +15,7 @@ export const INITIAL_USERS = [
     can_view_confidential: 1,
     password_hash: '6b496f7140d1cb0e808921d990d78bdf17dc74da9261d8a83bea08e342ba281b',
     password_salt: 'a1b2c3d4e5f6789012345678abcdef01',
-    must_change_password: 0,
+    must_change_password: 1,
     avatar: 'chairman_avatar',
     created_at: '2026-01-01T08:00:00Z'
   },
@@ -45,7 +45,7 @@ export const INITIAL_USERS = [
     can_view_confidential: 0,
     password_hash: 'f7e71e6b4a9d5a0c0d397f9949d1d35398a8930d3a30cb9f801047e6ddd4c1e3',
     password_salt: 'c3d4e5f6a1b2789012345678abcdef03',
-    must_change_password: 0,
+    must_change_password: 1,
     avatar: 'admin_avatar',
     created_at: '2026-01-01T08:00:00Z'
   }

@@ -392,6 +392,16 @@ export class ApiUserRepository implements IUserRepository {
   async updatePassword(userId: string, hash: string, salt: string, ctx: UserContext): Promise<void> {
     return apiRequest<void>(`/api/users/${userId}/password`, { method: 'PATCH', body: { hash, salt } });
   }
+
+  async create(data: Omit<User, 'id' | 'created_at'> & { password_hash: string; password_salt: string }, ctx: UserContext): Promise<User> {
+    const res = await apiRequest<{ user: User }>('/api/admin/users', { method: 'POST', body: data });
+    return res.user;
+  }
+
+  async update(id: string, data: Partial<Pick<User, 'name' | 'title' | 'email' | 'role' | 'can_view_confidential' | 'is_disabled'>>, ctx: UserContext): Promise<User> {
+    const res = await apiRequest<{ user: User }>(`/api/admin/users/${id}`, { method: 'PATCH', body: data });
+    return res.user;
+  }
 }
 
 // --- API Settings Repository ---
