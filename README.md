@@ -60,4 +60,5 @@ npm run build
 - 🔒 [وثيقة الأمان والتحصين (SECURITY.md)](./SECURITY.md)
 - 🏛️ [المعمارية التقنية والتصميم المفصل (ARCHITECTURE.md)](./ARCHITECTURE.md)
 - 🚀 [دليل النشر والتشغيل في بيئة الإنتاج (PRODUCTION_DEPLOYMENT.md)](./PRODUCTION_DEPLOYMENT.md)
+- 🖥️ [تثبيت خادم Windows وربط أجهزة المكتب (Windows Server LAN Setup)](./docs/WINDOWS_SERVER_INSTALLATION.md)
 - 📄 [وثيقة التسليم الفني ومتطلبات النشر (PRODUCTION_HANDOFF.md)](./PRODUCTION_HANDOFF.md)
