@@ -11,6 +11,7 @@ node_modules/
 /.stage/
 /coverage/
 /build/
+installer/payload/
 
 # Runtime data & backups (anchored to root)
 /data/
