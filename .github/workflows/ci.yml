@@ -25,5 +25,7 @@ jobs:
           cache: 'npm'
       - name: Install dependencies
         run: npm ci
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
       - name: Run verification pipeline
         run: npm run check
