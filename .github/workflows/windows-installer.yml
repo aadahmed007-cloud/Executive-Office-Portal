@@ -45,9 +45,10 @@ jobs:
           Copy-Item -Recurse -Force "dist-server" (Join-Path $payload "dist-server")
           Copy-Item -Recurse -Force "node_modules" (Join-Path $payload "node_modules")
           Copy-Item -Force "package.json" (Join-Path $payload "package.json")
+          Copy-Item -Force "installer/start-server.cmd" (Join-Path $payload "start-server.cmd")
           $runtime = Join-Path $payload "runtime"
           New-Item -ItemType Directory -Force -Path $runtime | Out-Null
-          Copy-Item -Force (Get-Command node.exe).Source (Join-Path $runtime "node.exe")
+          Copy-Item -Force (node -p "process.execPath") (Join-Path $runtime "node.exe")
 
       - name: Install Inno Setup
         shell: pwsh
@@ -59,7 +60,13 @@ jobs:
           if (-not (Test-Path $iscc)) {
             throw "Inno Setup compiler was not found at $iscc"
           }
-          & $iscc "installer/ExecutiveOfficePortal.iss"
+          Push-Location "installer"
+          try {
+            & $iscc "ExecutiveOfficePortal.iss"
+          }
+          finally {
+            Pop-Location
+          }
 
       - name: Upload installer
         uses: actions/upload-artifact@v4.6.2
