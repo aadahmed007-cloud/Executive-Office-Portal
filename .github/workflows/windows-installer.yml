@@ -1,0 +1,70 @@
+name: Windows Server Installer
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-installer:
+    name: Build Windows LAN server installer
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4.2.0
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+      - name: Build production app
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Prepare Windows server payload
+        shell: pwsh
+        run: |
+          npm prune --omit=dev
+          $payload = Join-Path $env:GITHUB_WORKSPACE "installer/payload"
+          New-Item -ItemType Directory -Force -Path $payload | Out-Null
+          Copy-Item -Recurse -Force "dist" (Join-Path $payload "dist")
+          Copy-Item -Recurse -Force "dist-server" (Join-Path $payload "dist-server")
+          Copy-Item -Recurse -Force "node_modules" (Join-Path $payload "node_modules")
+          Copy-Item -Force "package.json" (Join-Path $payload "package.json")
+          $runtime = Join-Path $payload "runtime"
+          New-Item -ItemType Directory -Force -Path $runtime | Out-Null
+          Copy-Item -Force (Get-Command node.exe).Source (Join-Path $runtime "node.exe")
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6/ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --yes --no-progress
+          }
+          if (-not (Test-Path $iscc)) {
+            throw "Inno Setup compiler was not found at $iscc"
+          }
+          & $iscc "installer/ExecutiveOfficePortal.iss"
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: Executive-Office-Portal-Windows-Installer
+          path: release/Executive-Office-Portal-Setup.exe
+          if-no-files-found: error
+          retention-days: 14
