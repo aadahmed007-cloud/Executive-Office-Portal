@@ -94,6 +94,12 @@ export const CorrespondenceView: React.FC = () => {
 
   useEffect(() => {
     loadData();
+
+    const handleRefresh = () => {
+      loadData();
+    };
+    window.addEventListener('app:data-refreshed', handleRefresh);
+    return () => window.removeEventListener('app:data-refreshed', handleRefresh);
   }, [currentUser]);
 
   const handleOpenDetail = (letter: Correspondence) => {

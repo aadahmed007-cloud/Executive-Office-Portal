@@ -43,12 +43,21 @@ export const MattersView: React.FC = () => {
 
   useEffect(() => {
     const userCtx = { can_view_confidential: currentUser.can_view_confidential, role: currentUser.role, userId: currentUser.id };
-    matterRepo.getAll(undefined, userCtx).then((list) => {
-      setMatters(list);
-      if (list.length > 0 && !selectedMatter) {
-        handleSelectMatter(list[0]);
-      }
-    });
+    const loadMatters = () => {
+      matterRepo.getAll(undefined, userCtx).then((list) => {
+        setMatters(list);
+        if (list.length > 0 && !selectedMatter) {
+          handleSelectMatter(list[0]);
+        }
+      });
+    };
+    loadMatters();
+
+    const handleRefresh = () => {
+      loadMatters();
+    };
+    window.addEventListener('app:data-refreshed', handleRefresh);
+    return () => window.removeEventListener('app:data-refreshed', handleRefresh);
   }, [currentUser]);
 
   const handleSelectMatter = async (matter: Matter) => {

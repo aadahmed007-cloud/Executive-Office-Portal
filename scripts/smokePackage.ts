@@ -234,6 +234,20 @@ async function runSmokeTest(): Promise<void> {
     }
     console.log('   ✅ تم فك تشفير والتحقق من قاعدة البيانات بنجاح في مسار مستقل بأذونات 0600.');
 
+    // 13. Test standby:check command from inside extracted package
+    console.log('1️⃣2️⃣ اختبار أداة فحص الجاهزية الاحتياطية (node dist-server/standbyCheck.js)...');
+    execSync('node dist-server/standbyCheck.js', {
+      cwd: smokeSandbox,
+      env: {
+        ...env,
+        BACKUP_DIR: testBackupDir,
+        BACKUP_PASSPHRASE: testPassphrase,
+        STANDBY_MAX_AGE_MINUTES: '90'
+      },
+      stdio: 'inherit'
+    });
+    console.log('   ✅ نجح فحص الجاهزية الاحتياطية (standby:check) داخل الحزمة المستخرجة.');
+
     console.log('======================================================================');
     console.log('🎉 نجح اختبار الجاهزية الميدانية الشامل للحزمة (Smoke Test Passed)');
     console.log('======================================================================');

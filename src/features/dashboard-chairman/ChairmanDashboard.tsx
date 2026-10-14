@@ -93,6 +93,12 @@ export const ChairmanDashboard: React.FC<ChairmanDashboardProps> = ({ onNavigate
 
   useEffect(() => {
     loadDashboardData();
+
+    const handleRefresh = () => {
+      loadDashboardData();
+    };
+    window.addEventListener('app:data-refreshed', handleRefresh);
+    return () => window.removeEventListener('app:data-refreshed', handleRefresh);
   }, [currentUser]);
 
   const handleSelectLetter = async (letter: Correspondence) => {

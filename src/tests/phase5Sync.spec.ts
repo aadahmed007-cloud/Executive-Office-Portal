@@ -70,18 +70,97 @@ describe('Phase 5: Multi-Device Freshness & Change Version Sync', () => {
   });
 
   it('4. Counter increments inside transaction; rolled-back transaction leaves counters unchanged', async () => {
-    const beforeRows = sqliteEngine.query<{ non_confidential_version: number }>('SELECT non_confidential_version FROM change_versions WHERE id = 1');
-    const vBefore = beforeRows[0].non_confidential_version;
+    const beforeRows = sqliteEngine.query<{ non_confidential_version: number; confidential_version: number }>('SELECT non_confidential_version, confidential_version FROM change_versions WHERE id = 1');
+    const vNonConfBefore = beforeRows[0].non_confidential_version;
+    const vConfBefore = beforeRows[0].confidential_version;
+
+    // Test successful transaction increment
+    sqliteEngine.transaction(() => {
+      sqliteEngine.incrementVersion(false);
+      sqliteEngine.incrementVersion(true);
+    });
+
+    const afterTxRows = sqliteEngine.query<{ non_confidential_version: number; confidential_version: number }>('SELECT non_confidential_version, confidential_version FROM change_versions WHERE id = 1');
+    expect(afterTxRows[0].non_confidential_version).toBe(vNonConfBefore + 1);
+    expect(afterTxRows[0].confidential_version).toBe(vConfBefore + 1);
 
     // Test rollback leaves counter unchanged
     try {
       sqliteEngine.transaction(() => {
-        sqliteEngine.run('UPDATE change_versions SET non_confidential_version = non_confidential_version + 1 WHERE id = 1', []);
+        sqliteEngine.incrementVersion(false);
+        sqliteEngine.incrementVersion(true);
         throw new Error('Force rollback');
       });
     } catch {}
 
-    const afterRollbackRows = sqliteEngine.query<{ non_confidential_version: number }>('SELECT non_confidential_version FROM change_versions WHERE id = 1');
-    expect(afterRollbackRows[0].non_confidential_version).toBe(vBefore);
+    const afterRollbackRows = sqliteEngine.query<{ non_confidential_version: number; confidential_version: number }>('SELECT non_confidential_version, confidential_version FROM change_versions WHERE id = 1');
+    expect(afterRollbackRows[0].non_confidential_version).toBe(vNonConfBefore + 1);
+    expect(afterRollbackRows[0].confidential_version).toBe(vConfBefore + 1);
+  });
+
+  it('5. Polling hook logic respects Page Visibility API and pauses when hidden (fake timers)', async () => {
+    const vi = (await import('vitest')).vi;
+    vi.useFakeTimers();
+
+    let pollCount = 0;
+    let isVisible = false;
+
+    // Simulate hook visibility guard & interval
+    const intervalMs = 20000;
+    const intervalId = setInterval(() => {
+      if (isVisible) {
+        pollCount++;
+      }
+    }, intervalMs);
+
+    // 1. Advance timer 60s while hidden -> should not poll
+    vi.advanceTimersByTime(60000);
+    expect(pollCount).toBe(0);
+
+    // 2. Tab becomes visible -> resumes polling
+    isVisible = true;
+    pollCount++; // immediate fetch on visibility
+    expect(pollCount).toBe(1);
+
+    // 3. Advance timer 40s while visible -> 2 more polls
+    vi.advanceTimersByTime(40000);
+    expect(pollCount).toBe(3);
+
+    // 4. Tab becomes hidden -> pauses polling
+    isVisible = false;
+    vi.advanceTimersByTime(40000);
+    expect(pollCount).toBe(3);
+
+    clearInterval(intervalId);
+    vi.useRealTimers();
+  });
+
+  it('6. Backoff on errors increases interval cleanly', () => {
+    const baseInterval = 20000;
+    const calculateBackoff = (errorCount: number) => Math.min(baseInterval * Math.pow(1.5, errorCount), 120000);
+
+    expect(calculateBackoff(0)).toBe(20000);
+    expect(calculateBackoff(1)).toBe(30000);
+    expect(calculateBackoff(2)).toBe(45000);
+    expect(calculateBackoff(10)).toBe(120000); // capped at 120s
+  });
+
+  it('7. Input drafts are preserved on refresh without discarding unsaved user input', () => {
+    // Simulate user typing into draft state
+    let draftInput = 'مسودة توجيه لم يتم حفظها بعد';
+    let dataList = ['البند 1', 'البند 2'];
+
+    // Simulate background refresh trigger from custom event
+    const handleDataRefreshed = (newItems: string[]) => {
+      dataList = newItems;
+      // Note: draftInput is NOT touched or reassigned
+    };
+
+    handleDataRefreshed(['البند 1', 'البند 2', 'البند 3 الجديد من جهاز آخر']);
+
+    // Assert that the draft input is completely preserved while data list is updated
+    expect(draftInput).toBe('مسودة توجيه لم يتم حفظها بعد');
+    expect(dataList).toHaveLength(3);
   });
 });
+

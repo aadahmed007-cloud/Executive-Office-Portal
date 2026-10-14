@@ -31,6 +31,13 @@ CREATE TABLE IF NOT EXISTS users (
   password_salt TEXT NOT NULL,
   must_change_password INTEGER DEFAULT 0,
   is_disabled INTEGER DEFAULT 0,
+  totp_enabled INTEGER DEFAULT 0,
+  totp_secret_enc TEXT,
+  totp_enrolled_at TEXT,
+  totp_last_step INTEGER DEFAULT 0,
+  recovery_codes TEXT,
+  totp_failed_attempts INTEGER DEFAULT 0,
+  totp_locked_until TEXT,
   avatar TEXT,
   created_at TEXT NOT NULL
 );
@@ -317,6 +324,12 @@ CREATE TABLE IF NOT EXISTS settings (
   audit_last_seq INTEGER DEFAULT 0,
   audit_head_hash TEXT DEFAULT 'GENESIS-BLOCK-00000000000000000000000000000000',
   audit_count INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS change_versions (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  non_confidential_version INTEGER NOT NULL DEFAULT 0,
+  confidential_version INTEGER NOT NULL DEFAULT 0
 );
 
 -- Performance and lookup Indexes

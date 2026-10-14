@@ -101,6 +101,9 @@ export class AuditLogger {
           `UPDATE settings SET audit_last_seq = ?, audit_head_hash = ?, audit_count = audit_count + 1 WHERE id = 'settings-global' OR id = (SELECT id FROM settings LIMIT 1)`,
           [entry.seq, entry.entry_hash]
         );
+
+        // Increment version in the SAME transaction
+        sqliteEngine.incrementVersion(isConf === 1);
       });
 
       return entry;

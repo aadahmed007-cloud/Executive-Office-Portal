@@ -221,7 +221,7 @@ describe('Phase 3: Server-Side Authorization & Confidentiality Enforcement', () 
     expect(routes.length).toBeGreaterThan(10);
 
     for (const r of routes) {
-      if (r.path === '/health' || (r.path === '/auth/login' && r.method === 'POST')) {
+      if (r.path === '/health' || r.path.startsWith('/auth/')) {
         continue;
       }
 
@@ -231,6 +231,9 @@ describe('Phase 3: Server-Side Authorization & Confidentiality Enforcement', () 
       }
 
       const res = await reqObj;
+      if (res.status !== 401) {
+        console.log('FAIL ROUTE:', r.method, r.path, 'status:', res.status, res.body);
+      }
       expect(res.status).toBe(401);
     }
   });

@@ -122,7 +122,16 @@ export interface IAuditRepository {
 export interface IUserRepository {
   getAll(ctx: UserContext): Promise<User[]>;
   getById(id: string, ctx: UserContext): Promise<User | null>;
-  getByUsername(username: string): Promise<(User & { password_hash: string; password_salt: string; is_disabled?: boolean }) | null>;
+  getByUsername(username: string): Promise<(User & {
+    password_hash: string;
+    password_salt: string;
+    is_disabled?: boolean;
+    totp_secret_enc?: string | null;
+    recovery_codes?: string | null;
+    totp_last_step?: number;
+    totp_failed_attempts?: number;
+    totp_locked_until?: string | null;
+  }) | null>;
   getByRole(role: RoleType, ctx: UserContext): Promise<User[]>;
   updatePassword(userId: string, hash: string, salt: string, ctx: UserContext): Promise<void>;
   create(data: Omit<User, 'id' | 'created_at'> & { password_hash: string; password_salt: string }, ctx: UserContext): Promise<User>;

@@ -111,7 +111,7 @@ export class SessionService {
 
     // Load fresh user from database to ensure up-to-date roles and permissions
     const userRows = sqliteEngine.query<any>(
-      `SELECT id, username, name, title, department_id, email, role, can_view_confidential, must_change_password, is_disabled, avatar, created_at
+      `SELECT id, username, name, title, department_id, email, role, can_view_confidential, must_change_password, is_disabled, totp_enabled, totp_enrolled_at, avatar, created_at
        FROM users WHERE id = ? LIMIT 1`,
       [session.user_id]
     );
@@ -139,6 +139,8 @@ export class SessionService {
       can_view_confidential: Boolean(dbUser.can_view_confidential),
       must_change_password: Boolean(dbUser.must_change_password),
       is_disabled: Boolean(dbUser.is_disabled),
+      totp_enabled: Boolean(dbUser.totp_enabled),
+      totp_enrolled_at: dbUser.totp_enrolled_at || null,
       avatar: dbUser.avatar,
       created_at: dbUser.created_at
     };

@@ -59,6 +59,12 @@ export const MeetingsView: React.FC = () => {
 
   useEffect(() => {
     loadMeetings();
+
+    const handleRefresh = () => {
+      loadMeetings();
+    };
+    window.addEventListener('app:data-refreshed', handleRefresh);
+    return () => window.removeEventListener('app:data-refreshed', handleRefresh);
   }, [currentUser]);
 
   // Real-time conflict detection on form change

@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import http from 'http';
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import Database from 'better-sqlite3';
 import { SqliteEngine } from '../data/database/sqliteEngine.js';
 import { verifyPasswordServer } from '../server/utils/crypto.js';
@@ -144,6 +144,9 @@ describe('Phase 3: Regression Guard Tests', () => {
 
       // Ensure dist-server/server.js exists (built server)
       const serverScript = path.join(rootDir, 'dist-server', 'server.js');
+      if (!fs.existsSync(serverScript)) {
+        execSync('npm run build:server', { cwd: rootDir, stdio: 'ignore' });
+      }
       expect(fs.existsSync(serverScript), 'dist-server/server.js must be built').toBe(true);
 
       let serverProc: any = null;

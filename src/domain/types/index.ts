@@ -16,6 +16,8 @@ export interface User {
   avatar?: string;
   must_change_password?: boolean;
   is_disabled?: boolean;
+  totp_enabled?: boolean;
+  totp_enrolled_at?: string | null;
   created_at: string;
 }
 

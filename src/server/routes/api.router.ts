@@ -13,6 +13,7 @@ import {
   requireAuth,
   csrfProtection,
   mustChangePasswordGuard,
+  require2FaEnrollmentGuard,
   rbacGuard,
   requireRole
 } from '../middleware/auth.middleware.js';
@@ -34,6 +35,11 @@ export const DECLARATIVE_ROUTES: DeclarativeRoute[] = [
   { method: 'get', path: '/health', handler: (req: any, res: any) => res.json({ status: 'ok' }), requireAuth: false, mustChangePassword: false },
   { method: 'post', path: '/auth/login', handler: AuthController.login, requireAuth: false, mustChangePassword: false },
 
+  // 1b. 2FA Routes
+  { method: 'post', path: '/auth/verify-totp', handler: AuthController.verifyTotp, requireAuth: false, mustChangePassword: false },
+  { method: 'post', path: '/auth/2fa/setup', handler: AuthController.setup2Fa, requireAuth: false, mustChangePassword: false },
+  { method: 'post', path: '/auth/2fa/confirm', handler: AuthController.confirm2Fa, requireAuth: false, mustChangePassword: false },
+
   // 2. Session Routes
   { method: 'get', path: '/auth/me', handler: AuthController.me, requireAuth: true, mustChangePassword: false },
   { method: 'post', path: '/auth/logout', handler: AuthController.logout, requireAuth: true, mustChangePassword: false },
@@ -50,6 +56,7 @@ export const DECLARATIVE_ROUTES: DeclarativeRoute[] = [
   { method: 'post', path: '/admin/users/:id/disable', handler: AdminUsersController.disableUser, requireAuth: true, mustChangePassword: true, resource: 'users', action: 'disable', requireAdmin: true },
   { method: 'post', path: '/admin/users/:id/enable', handler: AdminUsersController.enableUser, requireAuth: true, mustChangePassword: true, resource: 'users', action: 'update', requireAdmin: true },
   { method: 'post', path: '/admin/users/:id/reset-password', handler: AdminUsersController.resetPassword, requireAuth: true, mustChangePassword: true, resource: 'users', action: 'update', requireAdmin: true },
+  { method: 'post', path: '/admin/users/:id/reset-2fa', handler: AdminUsersController.reset2Fa, requireAuth: true, mustChangePassword: true, resource: 'users', action: 'update', requireAdmin: true },
 
   // 4. Meetings
   { method: 'get', path: '/meetings', handler: MeetingsController.getAll, requireAuth: true, mustChangePassword: true, resource: 'meetings', action: 'read' },
@@ -146,6 +153,7 @@ DECLARATIVE_ROUTES.forEach((route) => {
 
   if (route.mustChangePassword) {
     middlewares.push(mustChangePasswordGuard);
+    middlewares.push(require2FaEnrollmentGuard);
   }
 
   if (route.resource && route.action) {

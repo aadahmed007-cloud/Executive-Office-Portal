@@ -1481,7 +1481,16 @@ export class SqliteUserRepository implements IUserRepository {
     };
   }
 
-  async getByUsername(username: string): Promise<(User & { password_hash: string; password_salt: string; is_disabled?: boolean }) | null> {
+  async getByUsername(username: string): Promise<(User & {
+    password_hash: string;
+    password_salt: string;
+    is_disabled?: boolean;
+    totp_secret_enc?: string | null;
+    recovery_codes?: string | null;
+    totp_last_step?: number;
+    totp_failed_attempts?: number;
+    totp_locked_until?: string | null;
+  }) | null> {
     const rows = sqliteEngine.query<any>('SELECT * FROM users WHERE LOWER(username) = LOWER(?)', [username.trim()]);
     if (!rows[0]) return null;
     const u = rows[0];
@@ -1489,7 +1498,9 @@ export class SqliteUserRepository implements IUserRepository {
       ...u,
       can_view_confidential: Boolean(u.can_view_confidential),
       must_change_password: Boolean(u.must_change_password),
-      is_disabled: Boolean(u.is_disabled)
+      is_disabled: Boolean(u.is_disabled),
+      totp_enabled: Boolean(u.totp_enabled),
+      totp_enrolled_at: u.totp_enrolled_at || null
     };
   }
 

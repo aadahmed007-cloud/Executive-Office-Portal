@@ -158,6 +158,34 @@ export function mustChangePasswordGuard(req: Request, res: Response, next: NextF
 }
 
 /**
+ * Middleware to enforce TOTP 2FA enrollment when REQUIRE_2FA=true for CHAIRMAN and ADMIN.
+ */
+export function require2FaEnrollmentGuard(req: Request, res: Response, next: NextFunction): void {
+  if (process.env.REQUIRE_2FA === 'true' && req.user) {
+    const isTargetRole = req.user.role === 'CHAIRMAN' || req.user.role === 'ADMIN';
+    if (isTargetRole && !req.user.totp_enabled) {
+      const allowedPaths = [
+        '/api/auth/2fa/setup',
+        '/api/auth/2fa/confirm',
+        '/api/auth/change-password',
+        '/api/auth/me',
+        '/api/auth/logout',
+        '/api/health'
+      ];
+
+      if (!allowedPaths.includes(req.path)) {
+        res.status(403).json({
+          error: 'المصادقة الثنائية (2FA) إلزامية لحسابك وفقاً للسياسة الأمنية، يرجى تفعيلها أولاً',
+          code: 'REQUIRE_2FA_ENROLLMENT'
+        });
+        return;
+      }
+    }
+  }
+  next();
+}
+
+/**
  * Middleware requiring specific user roles.
  */
 export function requireRole(allowedRoles: RoleType[]) {

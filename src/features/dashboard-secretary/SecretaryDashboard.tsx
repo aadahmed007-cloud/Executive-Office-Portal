@@ -68,6 +68,12 @@ export const SecretaryDashboard: React.FC<SecretaryDashboardProps> = ({ onNaviga
       }
     }
     loadData();
+
+    const handleRefresh = () => {
+      loadData();
+    };
+    window.addEventListener('app:data-refreshed', handleRefresh);
+    return () => window.removeEventListener('app:data-refreshed', handleRefresh);
   }, [currentUser]);
 
   // Calculations

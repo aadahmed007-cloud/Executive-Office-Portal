@@ -21,10 +21,17 @@ import { AuditLogView } from '../../features/audit/AuditLogView';
 import { NotificationsView } from '../../features/notifications/NotificationsView';
 import { WeeklySummaryView } from '../../features/reports/WeeklySummaryView';
 import { UsersManagementView } from '../../features/auth/UsersManagementView';
+import { useSyncPolling, SyncVersions } from '../../features/sync/useSyncPolling';
 
 export const MainLayout: React.FC = () => {
   const { currentUser, isAuthenticated, isLocked, mustChangePasswordPrompt } = useAuth();
   const { dir } = useI18n();
+
+  const handleDataChanged = React.useCallback((versions: SyncVersions) => {
+    window.dispatchEvent(new CustomEvent('app:data-refreshed', { detail: versions }));
+  }, []);
+
+  const { showUpdatedIndicator } = useSyncPolling(handleDataChanged);
 
   // Active view tab state (default changes based on role)
   const [activeTab, setActiveTab] = useState<string>(() => {
@@ -130,6 +137,17 @@ export const MainLayout: React.FC = () => {
 
       {/* Forced Password Change Modal */}
       {mustChangePasswordPrompt && <PasswordChangeModal />}
+
+      {/* Discreet auto-sync indicator without layout jumps */}
+      {showUpdatedIndicator && (
+        <div
+          data-testid="sync-updated-indicator"
+          className="fixed bottom-4 left-4 z-50 bg-emerald-950/90 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-lg border border-emerald-500/40 flex items-center gap-2 pointer-events-none transition-all duration-300"
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span>تم التحديث</span>
+        </div>
+      )}
     </div>
   );
 };

@@ -47,7 +47,7 @@ export class AdminUsersController {
     try {
       const rows = sqliteEngine.query<any>(
         `SELECT u.id, u.username, u.name, u.title, u.department_id, u.email, u.role,
-                u.can_view_confidential, u.must_change_password, u.is_disabled, u.avatar, u.created_at,
+                u.can_view_confidential, u.must_change_password, u.is_disabled, u.totp_enabled, u.totp_enrolled_at, u.avatar, u.created_at,
                 (SELECT MAX(s.last_active_at) FROM sessions s WHERE s.user_id = u.id) as last_active_at,
                 (SELECT ls.last_success_at FROM login_security ls WHERE LOWER(ls.username) = LOWER(u.username)) as last_login_at
          FROM users u
@@ -65,6 +65,8 @@ export class AdminUsersController {
         can_view_confidential: Boolean(u.can_view_confidential),
         must_change_password: Boolean(u.must_change_password),
         is_disabled: Boolean(u.is_disabled),
+        totp_enabled: Boolean(u.totp_enabled),
+        totp_enrolled_at: u.totp_enrolled_at || null,
         avatar: u.avatar || null,
         created_at: u.created_at,
         last_login_at: u.last_login_at || u.last_active_at || null
@@ -482,6 +484,73 @@ export class AdminUsersController {
         success: true,
         temporary_password: newTempPassword,
         warning: 'احفظ كلمة المرور الجديدة الآن؛ لن يتم عرضها مرة أخرى إطلاقاً وسيطلب من المستخدم تغييرها عند تسجيل الدخول.'
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * POST /api/admin/users/:id/reset-2fa
+   * ADMIN can reset a user's 2FA with a typed confirmation and an audit entry (P8-3).
+   */
+  static async reset2Fa(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const resetSchema = z.object({
+        confirmUsername: z.string().min(1, 'يرجى كتابة اسم المستخدم للتأكيد')
+      }).strict();
+
+      const parseResult = resetSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        res.status(400).json({ error: parseResult.error.issues?.[0]?.message || 'بيانات غير صالحة' });
+        return;
+      }
+
+      const userId = req.params.id;
+      const targetUser = await userRepo.getById(userId, req.userContext!);
+      if (!targetUser) {
+        res.status(404).json({ error: 'المستخدم غير موجود' });
+        return;
+      }
+
+      const { confirmUsername } = parseResult.data;
+      if (confirmUsername.trim().toLowerCase() !== targetUser.username.trim().toLowerCase()) {
+        res.status(400).json({ error: 'اسم المستخدم للتأكيد غير مطابق؛ يرجى كتابة اسم المستخدم بدقة لتأكيد إعادة التعيين' });
+        return;
+      }
+
+      const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
+
+      sqliteEngine.transaction(() => {
+        sqliteEngine.run(
+          `UPDATE users SET
+             totp_enabled = 0,
+             totp_secret_enc = NULL,
+             totp_enrolled_at = NULL,
+             totp_last_step = 0,
+             recovery_codes = NULL,
+             totp_failed_attempts = 0,
+             totp_locked_until = NULL
+           WHERE id = ?`,
+          [userId]
+        );
+      });
+
+      await auditRepo.log({
+        user_id: req.user!.id,
+        user_name: req.user!.name,
+        user_role: req.user!.role,
+        action_type: 'UPDATE',
+        entity_type: 'USER_2FA_RESET',
+        entity_id: userId,
+        before_value: null,
+        after_value: `تم إلغاء وإعادة تعيين المصادقة الثنائية (2FA) للمستخدم (${targetUser.username}) بواسطة مسؤول النظام`,
+        ip_address: clientIp
+      }, req.userContext || { userId: req.user!.id, role: req.user!.role, can_view_confidential: Boolean(req.user!.can_view_confidential) });
+
+      res.json({
+        success: true,
+        message: `تم إلغاء وإعادة تعيين المصادقة الثنائية (2FA) للمستخدم (${targetUser.username}) بنجاح.`
       });
     } catch (err) {
       next(err);

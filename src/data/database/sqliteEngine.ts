@@ -304,6 +304,34 @@ export class SqliteEngine {
       this.db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(3, new Date().toISOString());
     }
 
+    // Migration 4: Add TOTP / 2FA columns to users
+    if (!appliedVersions.has(4)) {
+      const userColumns = this.query<{ name: string }>("PRAGMA table_info(users)");
+      const colNames = new Set(userColumns.map((c) => c.name));
+      if (!colNames.has('totp_enabled')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN totp_enabled INTEGER DEFAULT 0');
+      }
+      if (!colNames.has('totp_secret_enc')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN totp_secret_enc TEXT');
+      }
+      if (!colNames.has('totp_enrolled_at')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN totp_enrolled_at TEXT');
+      }
+      if (!colNames.has('totp_last_step')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN totp_last_step INTEGER DEFAULT 0');
+      }
+      if (!colNames.has('recovery_codes')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN recovery_codes TEXT');
+      }
+      if (!colNames.has('totp_failed_attempts')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN totp_failed_attempts INTEGER DEFAULT 0');
+      }
+      if (!colNames.has('totp_locked_until')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN totp_locked_until TEXT');
+      }
+      this.db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(4, new Date().toISOString());
+    }
+
     // Seed data only on fresh empty database
     const userCountRows = this.query<{ count: number }>('SELECT count(*) as count FROM users');
     const existingUserCount = userCountRows[0]?.count || 0;

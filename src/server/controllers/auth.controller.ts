@@ -9,6 +9,21 @@ import {
   hashPasswordServer,
   dummyPasswordHash
 } from '../utils/crypto.js';
+import {
+  sign2FaToken,
+  verify2FaToken,
+  checkTotpLockout,
+  recordTotpFailure,
+  recordTotpSuccess,
+  generateTotpSecret,
+  encryptTotpSecret,
+  decryptTotpSecret,
+  generateRecoveryCodes,
+  verifyAndConsumeRecoveryCode,
+  generateOtpAuthUri,
+  generateQrCodeSvg,
+  verifyTotpCode
+} from '../services/totp.service.js';
 
 const loginSchema = z.object({
   username: z.string().min(1, 'اسم المستخدم مطلوب'),
@@ -24,6 +39,21 @@ const changePasswordSchema = z.object({
 
 const reauthSchema = z.object({
   password: z.string().min(1, 'كلمة المرور مطلوبة')
+}).strict();
+
+const verifyTotpSchema = z.object({
+  totp_token: z.string().min(1, 'رمز الجلسة المؤقت مطلوب'),
+  code: z.string().optional(),
+  recovery_code: z.string().optional()
+}).strict();
+
+const setup2FaSchema = z.object({
+  totp_token: z.string().optional()
+}).strict();
+
+const confirm2FaSchema = z.object({
+  totp_token: z.string().optional(),
+  code: z.string().min(1, 'رمز المصادقة مطلوب')
 }).strict();
 
 export class AuthController {
@@ -124,14 +154,47 @@ export class AuthController {
       // 4. Reset brute force attempts on success
       AuthSecurityService.recordSuccess(username);
 
-      // 5. Create server session & rotate cookie
+      // 5. Check 2FA requirements:
+      // Case A: User has 2FA enabled
+      if (Boolean(userRecord.totp_enabled)) {
+        const lockout = checkTotpLockout(userRecord);
+        if (lockout.isLocked) {
+          res.status(429).json({
+            error: `تم قفل المصادقة الثنائية مؤقتاً لتكرار المحاولات الخاطئة. يرجى الانتظار حتى: ${lockout.lockedUntil}`,
+            code: 'TOTP_LOCKED'
+          });
+          return;
+        }
+
+        const totpToken = sign2FaToken(userRecord.id, 'login');
+        res.json({
+          require_totp: true,
+          totp_token: totpToken,
+          user_id: userRecord.id
+        });
+        return;
+      }
+
+      // Case B: Policy REQUIRE_2FA=true enforces enrollment for CHAIRMAN and ADMIN
+      const isTargetRole = userRecord.role === 'CHAIRMAN' || userRecord.role === 'ADMIN';
+      if (process.env.REQUIRE_2FA === 'true' && isTargetRole && !userRecord.totp_enabled) {
+        const totpToken = sign2FaToken(userRecord.id, 'enrollment');
+        res.json({
+          require_totp_enrollment: true,
+          totp_token: totpToken,
+          user_id: userRecord.id
+        });
+        return;
+      }
+
+      // 6. Create server session & rotate cookie (No 2FA needed or enabled)
       const rawToken = SessionService.createSession(userRecord.id, {
         ipAddress: clientIp,
         userAgent: req.headers['user-agent']
       });
       SessionService.setCookie(res, rawToken);
 
-      // 6. Log successful authentication
+      // 7. Log successful authentication
       await auditRepo.log({
         user_id: userRecord.id,
         user_name: userRecord.name,
@@ -144,12 +207,13 @@ export class AuthController {
         ip_address: clientIp
       }, { userId: userRecord.id, role: userRecord.role, can_view_confidential: Boolean(userRecord.can_view_confidential) });
 
-      const { password_hash, password_salt, ...safeUser } = userRecord;
+      const { password_hash, password_salt, totp_secret_enc, recovery_codes, ...safeUser } = userRecord;
       res.json({
         user: {
           ...safeUser,
           can_view_confidential: Boolean(safeUser.can_view_confidential),
-          must_change_password: Boolean(safeUser.must_change_password)
+          must_change_password: Boolean(safeUser.must_change_password),
+          totp_enabled: Boolean(safeUser.totp_enabled)
         }
       });
     } catch (err) {
@@ -385,6 +449,356 @@ export class AuthController {
       });
 
       res.json(sanitized);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * POST /api/auth/verify-totp
+   */
+  static async verifyTotp(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const parseResult = verifyTotpSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        res.status(400).json({ error: parseResult.error.issues?.[0]?.message || 'بيانات غير صالحة' });
+        return;
+      }
+
+      const { totp_token, code, recovery_code } = parseResult.data;
+      if (!code && !recovery_code) {
+        res.status(400).json({ error: 'يرجى إدخال رمز المصادقة الثنائية (TOTP) أو رمز الاسترداد' });
+        return;
+      }
+
+      const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
+
+      // 1. Verify pre-auth token
+      const tokenPayload = verify2FaToken(totp_token);
+      if (!tokenPayload) {
+        res.status(401).json({ error: 'جلسة التحقق المؤقتة منتهية الصلاحية أو غير صالحة. يرجى تسجيل الدخول مجدداً.' });
+        return;
+      }
+
+      const rows = sqliteEngine.query<any>(
+        'SELECT * FROM users WHERE id = ? LIMIT 1',
+        [tokenPayload.userId]
+      );
+      const user = rows[0];
+      if (!user || Boolean(user.is_disabled)) {
+        res.status(401).json({ error: 'المستخدم غير متاح أو تم تعطيل حسابه' });
+        return;
+      }
+
+      if (!user.totp_enabled) {
+        res.status(400).json({ error: 'المصادقة الثنائية غير مفعلة لهذا الحساب' });
+        return;
+      }
+
+      // 2. Check Lockout
+      const lockout = checkTotpLockout(user);
+      if (lockout.isLocked) {
+        res.status(429).json({
+          error: `تم قفل المصادقة الثنائية مؤقتاً لتكرار المحاولات الخاطئة. يرجى الانتظار حتى: ${lockout.lockedUntil}`,
+          code: 'TOTP_LOCKED'
+        });
+        return;
+      }
+
+      // 3. Handle Recovery Code
+      if (recovery_code) {
+        const recoveryResult = verifyAndConsumeRecoveryCode(recovery_code, user.recovery_codes);
+        if (!recoveryResult.isValid) {
+          const failStatus = recordTotpFailure(user.id);
+          await auditRepo.log({
+            user_id: user.id,
+            user_name: user.name,
+            user_role: user.role,
+            action_type: 'AUTH',
+            entity_type: 'LOGIN_FAILURE',
+            entity_id: user.id,
+            before_value: null,
+            after_value: `محاولة تسجيل دخول فاشلة برمز استرداد غير صالح للمستخدم (${user.username})`,
+            ip_address: clientIp
+          }, { userId: user.id, role: user.role, can_view_confidential: Boolean(user.can_view_confidential) });
+
+          if (failStatus.isLocked) {
+            res.status(429).json({
+              error: `تم قفل المصادقة الثنائية مؤقتاً لتكرار المحاولات الخاطئة. يرجى الانتظار حتى: ${failStatus.lockedUntil}`,
+              code: 'TOTP_LOCKED'
+            });
+            return;
+          }
+          res.status(401).json({ error: 'رمز الاسترداد غير صحيح أو تم استخدامه مسبقاً' });
+          return;
+        }
+
+        // Recovery code valid! Update remaining recovery codes & reset failures
+        sqliteEngine.run(
+          'UPDATE users SET recovery_codes = ?, totp_failed_attempts = 0, totp_locked_until = NULL WHERE id = ?',
+          [recoveryResult.remainingHashedCodesJson!, user.id]
+        );
+
+        // Create session
+        const rawToken = SessionService.createSession(user.id, {
+          ipAddress: clientIp,
+          userAgent: req.headers['user-agent']
+        });
+        SessionService.setCookie(res, rawToken);
+
+        await auditRepo.log({
+          user_id: user.id,
+          user_name: user.name,
+          user_role: user.role,
+          action_type: 'AUTH',
+          entity_type: 'SESSION',
+          entity_id: user.id,
+          before_value: null,
+          after_value: `تسجيل دخول ناجح باستخدام رمز استرداد لمرة واحدة للمستخدم (${user.name} - ${user.role})`,
+          ip_address: clientIp
+        }, { userId: user.id, role: user.role, can_view_confidential: Boolean(user.can_view_confidential) });
+
+        const { password_hash, password_salt, totp_secret_enc, recovery_codes: _, ...safeUser } = user;
+        res.json({
+          user: {
+            ...safeUser,
+            can_view_confidential: Boolean(safeUser.can_view_confidential),
+            must_change_password: Boolean(safeUser.must_change_password),
+            totp_enabled: true
+          }
+        });
+        return;
+      }
+
+      // 4. Handle Standard TOTP Code
+      if (!user.totp_secret_enc) {
+        res.status(500).json({ error: 'بيانات المصادقة الثنائية غير متوفرة' });
+        return;
+      }
+
+      const secret = decryptTotpSecret(user.totp_secret_enc);
+      const verifyResult = verifyTotpCode(secret, code!, Math.floor(Date.now() / 1000), {
+        window: 1,
+        lastStep: user.totp_last_step ?? -1
+      });
+
+      if (verifyResult.reason === 'REUSED_CODE') {
+        recordTotpFailure(user.id);
+        res.status(400).json({
+          error: 'تم استخدام رمز المصادقة هذا مسبقاً في هذه النافذة الزمنية، يرجى الانتظار لتوليد رمز جديد',
+          code: 'TOTP_CODE_REUSED'
+        });
+        return;
+      }
+
+      if (!verifyResult.isValid) {
+        const failStatus = recordTotpFailure(user.id);
+
+        await auditRepo.log({
+          user_id: user.id,
+          user_name: user.name,
+          user_role: user.role,
+          action_type: 'AUTH',
+          entity_type: 'LOGIN_FAILURE',
+          entity_id: user.id,
+          before_value: null,
+          after_value: `محاولة مصادقة ثنائية فاشلة للمستخدم (${user.username}) - رمز غير مطابق`,
+          ip_address: clientIp
+        }, { userId: user.id, role: user.role, can_view_confidential: Boolean(user.can_view_confidential) });
+
+        if (failStatus.isLocked) {
+          res.status(429).json({
+            error: `تم قفل المصادقة الثنائية مؤقتاً لتكرار المحاولات الخاطئة. يرجى الانتظار حتى: ${failStatus.lockedUntil}`,
+            code: 'TOTP_LOCKED'
+          });
+          return;
+        }
+
+        res.status(401).json({ error: 'رمز المصادقة الثنائية غير صحيح' });
+        return;
+      }
+
+      // Valid TOTP code! Update lastStep and reset failures in DB
+      recordTotpSuccess(user.id);
+      sqliteEngine.run(
+        'UPDATE users SET totp_last_step = ? WHERE id = ?',
+        [verifyResult.matchedStep, user.id]
+      );
+
+      // Create session & rotate cookie
+      const rawToken = SessionService.createSession(user.id, {
+        ipAddress: clientIp,
+        userAgent: req.headers['user-agent']
+      });
+      SessionService.setCookie(res, rawToken);
+
+      await auditRepo.log({
+        user_id: user.id,
+        user_name: user.name,
+        user_role: user.role,
+        action_type: 'AUTH',
+        entity_type: 'SESSION',
+        entity_id: user.id,
+        before_value: null,
+        after_value: `تسجيل دخول ناجح مع إتمام المصادقة الثنائية (2FA) للمستخدم (${user.name} - ${user.role})`,
+        ip_address: clientIp
+      }, { userId: user.id, role: user.role, can_view_confidential: Boolean(user.can_view_confidential) });
+
+      const { password_hash, password_salt, totp_secret_enc, recovery_codes: _, ...safeUser } = user;
+      res.json({
+        user: {
+          ...safeUser,
+          can_view_confidential: Boolean(safeUser.can_view_confidential),
+          must_change_password: Boolean(safeUser.must_change_password),
+          totp_enabled: true
+        }
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * POST /api/auth/2fa/setup
+   * Generate per-user secret, otpauth URI, QR code SVG, and 10 recovery codes.
+   */
+  static async setup2Fa(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const parseResult = setup2FaSchema.safeParse(req.body);
+      let userId = req.user?.id;
+
+      if (!userId && parseResult.success && parseResult.data.totp_token) {
+        const tokenPayload = verify2FaToken(parseResult.data.totp_token);
+        if (tokenPayload) {
+          userId = tokenPayload.userId;
+        }
+      }
+
+      if (!userId) {
+        res.status(401).json({ error: 'يرجى تسجيل الدخول أو تقديم رمز جلسة صالح للبدء بإعداد المصادقة الثنائية' });
+        return;
+      }
+
+      const rows = sqliteEngine.query<any>('SELECT * FROM users WHERE id = ? LIMIT 1', [userId]);
+      const user = rows[0];
+      if (!user || Boolean(user.is_disabled)) {
+        res.status(401).json({ error: 'المستخدم غير متاح' });
+        return;
+      }
+
+      const secret = generateTotpSecret(20);
+      const secretEnc = encryptTotpSecret(secret);
+      const { plaintextCodes, hashedCodes } = generateRecoveryCodes(10);
+      const otpauthUri = generateOtpAuthUri(user.username, secret);
+      const qrCodeSvg = await generateQrCodeSvg(otpauthUri);
+
+      // Store pending secret and recovery codes (totp_enabled remains 0 until confirmed)
+      sqliteEngine.run(
+        'UPDATE users SET totp_secret_enc = ?, recovery_codes = ? WHERE id = ?',
+        [secretEnc, JSON.stringify(hashedCodes), user.id]
+      );
+
+      res.json({
+        otpauthUri,
+        manualEntrySecret: secret,
+        qrCodeSvg,
+        recoveryCodes: plaintextCodes
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * POST /api/auth/2fa/confirm
+   * Confirms enrollment with a valid TOTP code.
+   */
+  static async confirm2Fa(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const parseResult = confirm2FaSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        res.status(400).json({ error: parseResult.error.issues?.[0]?.message || 'بيانات غير صالحة' });
+        return;
+      }
+
+      const { totp_token, code } = parseResult.data;
+      let userId = req.user?.id;
+      let isPreAuth = false;
+
+      if (!userId && totp_token) {
+        const tokenPayload = verify2FaToken(totp_token);
+        if (tokenPayload) {
+          userId = tokenPayload.userId;
+          isPreAuth = true;
+        }
+      }
+
+      if (!userId) {
+        res.status(401).json({ error: 'يرجى تسجيل الدخول لتأكيد تفعيل المصادقة الثنائية' });
+        return;
+      }
+
+      const rows = sqliteEngine.query<any>('SELECT * FROM users WHERE id = ? LIMIT 1', [userId]);
+      const user = rows[0];
+      if (!user || Boolean(user.is_disabled)) {
+        res.status(401).json({ error: 'المستخدم غير متاح' });
+        return;
+      }
+
+      if (!user.totp_secret_enc) {
+        res.status(400).json({ error: 'يرجى بدء إعداد المصادقة الثنائية أولاً عبر /setup' });
+        return;
+      }
+
+      const secret = decryptTotpSecret(user.totp_secret_enc);
+      const verifyResult = verifyTotpCode(secret, code, Math.floor(Date.now() / 1000), { window: 1 });
+
+      if (!verifyResult.isValid) {
+        res.status(400).json({ error: 'رمز التحقق غير صحيح، يرجى التأكد من الوقت والمحاولة مجدداً' });
+        return;
+      }
+
+      const nowIso = new Date().toISOString();
+      const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
+
+      sqliteEngine.transaction(() => {
+        sqliteEngine.run(
+          `UPDATE users SET
+             totp_enabled = 1,
+             totp_enrolled_at = ?,
+             totp_last_step = ?,
+             totp_failed_attempts = 0,
+             totp_locked_until = NULL
+           WHERE id = ?`,
+          [nowIso, verifyResult.matchedStep, user.id]
+        );
+      });
+
+      await auditRepo.log({
+        user_id: user.id,
+        user_name: user.name,
+        user_role: user.role,
+        action_type: 'UPDATE',
+        entity_type: 'USER_2FA_ENROLLED',
+        entity_id: user.id,
+        before_value: null,
+        after_value: `تم تفعيل المصادقة الثنائية (2FA) بنجاح للمستخدم (${user.username})`,
+        ip_address: clientIp
+      }, { userId: user.id, role: user.role, can_view_confidential: Boolean(user.can_view_confidential) });
+
+      // If pre-auth flow (user enrolled before full login), establish session now!
+      if (isPreAuth) {
+        const rawToken = SessionService.createSession(user.id, {
+          ipAddress: clientIp,
+          userAgent: req.headers['user-agent']
+        });
+        SessionService.setCookie(res, rawToken);
+      }
+
+      res.json({
+        success: true,
+        message: 'تم تفعيل المصادقة الثنائية بنجاح على حسابك'
+      });
     } catch (err) {
       next(err);
     }
