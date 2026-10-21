@@ -42,7 +42,7 @@ import {
   ConfidentialityLevel
 } from '../../domain/types/index.js';
 import { generateSerialNumber } from '../../domain/rules/serialGenerator.js';
-import { computeAuditEntryHash } from '../../domain/security/cryptoUtils.js';
+import { computeAuditEntryHash, computeAuditEntryHashSync } from '../../domain/security/cryptoUtils.js';
 import { can } from '../../server/security/permissions.js';
 
 // --- Column Whitelists for SQL Injection Protection and Mass Assignment Prevention ---
@@ -125,51 +125,68 @@ export class SqliteAuditRepository implements IAuditRepository {
     return verifyAuditLogIntegrity(rows, checkpoint);
   }
 
-  async log(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>, ctx: UserContext): Promise<void> {
-    return sqliteEngine.runWithMutex(async () => {
-      const id = `audit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-      const timestamp = new Date().toISOString();
-      const latestRows = sqliteEngine.query<{ seq: number; entry_hash: string }>('SELECT seq, entry_hash FROM audit_log ORDER BY seq DESC LIMIT 1');
-      const prevHash = latestRows[0]?.entry_hash || 'GENESIS-BLOCK-00000000000000000000000000000000';
-      const nextSeq = (latestRows[0]?.seq || 0) + 1;
-      const ip = entry.ip_address || '';
+  writeAuditEntrySync(entry: Omit<AuditLogEntry, 'id' | 'timestamp' | 'ip_address'> & { ip_address?: string; is_confidential?: number | boolean }, ctx?: UserContext): AuditLogEntry {
+    const id = `audit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const timestamp = new Date().toISOString();
+    const latestRows = sqliteEngine.query<{ seq: number; entry_hash: string }>('SELECT seq, entry_hash FROM audit_log ORDER BY seq DESC LIMIT 1');
+    const prevHash = latestRows[0]?.entry_hash || 'GENESIS-BLOCK-00000000000000000000000000000000';
+    const nextSeq = (latestRows[0]?.seq || 0) + 1;
+    const ip = entry.ip_address || '';
 
     let safeBefore = entry.before_value;
     let safeAfter = entry.after_value;
 
     let confidentiality = 'confidential'; // fail-closed default
 
-    if (entry.entity_type === 'CORRESPONDENCE') {
+    if (entry.is_confidential !== undefined) {
+      confidentiality = entry.is_confidential ? 'confidential' : 'normal';
+    } else if (entry.entity_type === 'CORRESPONDENCE') {
       const rows = sqliteEngine.query<any>('SELECT confidentiality FROM correspondence WHERE id = ?', [entry.entity_id]);
       if (rows.length > 0) {
         confidentiality = rows[0].confidentiality;
       } else if (entry.after_value) {
-        const parsed = JSON.parse(entry.after_value);
-        confidentiality = parsed.confidentiality || 'confidential';
+        try {
+          const parsed = JSON.parse(entry.after_value);
+          confidentiality = parsed.confidentiality || 'confidential';
+        } catch {
+          confidentiality = 'confidential';
+        }
       }
     } else if (entry.entity_type === 'MEETING') {
       const rows = sqliteEngine.query<any>('SELECT confidentiality FROM meetings WHERE id = ?', [entry.entity_id]);
       if (rows.length > 0) {
         confidentiality = rows[0].confidentiality;
       } else if (entry.after_value) {
-        const parsed = JSON.parse(entry.after_value);
-        confidentiality = parsed.confidentiality || 'confidential';
+        try {
+          const parsed = JSON.parse(entry.after_value);
+          confidentiality = parsed.confidentiality || 'confidential';
+        } catch {
+          confidentiality = 'confidential';
+        }
       }
     } else if (entry.entity_type === 'DIRECTIVE') {
       const rows = sqliteEngine.query<any>('SELECT confidentiality FROM directives WHERE id = ?', [entry.entity_id]);
       if (rows.length > 0) {
         confidentiality = rows[0].confidentiality;
       } else if (entry.after_value) {
-        const parsed = JSON.parse(entry.after_value);
-        confidentiality = parsed.confidentiality || 'confidential';
+        try {
+          const parsed = JSON.parse(entry.after_value);
+          confidentiality = parsed.confidentiality || 'confidential';
+        } catch {
+          confidentiality = 'confidential';
+        }
       }
     } else if (entry.entity_type === 'MATTER') {
       const rows = sqliteEngine.query<any>('SELECT confidentiality FROM matters WHERE id = ?', [entry.entity_id]);
       if (rows.length > 0) {
         confidentiality = rows[0].confidentiality;
       } else if (entry.after_value) {
-        const parsed = JSON.parse(entry.after_value);
-        confidentiality = parsed.confidentiality || 'confidential';
+        try {
+          const parsed = JSON.parse(entry.after_value);
+          confidentiality = parsed.confidentiality || 'confidential';
+        } catch {
+          confidentiality = 'confidential';
+        }
       }
     } else if (entry.entity_type === 'BRIEFING_NOTE') {
       const bnRows = sqliteEngine.query<any>('SELECT correspondence_id FROM briefing_notes WHERE id = ?', [entry.entity_id]);
@@ -177,10 +194,14 @@ export class SqliteAuditRepository implements IAuditRepository {
         const rows = sqliteEngine.query<any>('SELECT confidentiality FROM correspondence WHERE id = ?', [bnRows[0].correspondence_id]);
         confidentiality = rows[0]?.confidentiality || 'confidential';
       } else if (entry.after_value) {
-        const parsed = JSON.parse(entry.after_value);
-        const parentId = parsed.correspondence_id || parsed.id;
-        const rows = sqliteEngine.query<any>('SELECT confidentiality FROM correspondence WHERE id = ?', [parentId]);
-        confidentiality = rows[0]?.confidentiality || 'confidential';
+        try {
+          const parsed = JSON.parse(entry.after_value);
+          const parentId = parsed.correspondence_id || parsed.id;
+          const rows = sqliteEngine.query<any>('SELECT confidentiality FROM correspondence WHERE id = ?', [parentId]);
+          confidentiality = rows[0]?.confidentiality || 'confidential';
+        } catch {
+          confidentiality = 'confidential';
+        }
       }
     } else if (entry.entity_type === 'APPROVAL') {
       const appRows = sqliteEngine.query<any>('SELECT correspondence_id FROM approvals WHERE id = ?', [entry.entity_id]);
@@ -188,10 +209,14 @@ export class SqliteAuditRepository implements IAuditRepository {
         const rows = sqliteEngine.query<any>('SELECT confidentiality FROM correspondence WHERE id = ?', [appRows[0].correspondence_id]);
         confidentiality = rows[0]?.confidentiality || 'confidential';
       } else if (entry.after_value) {
-        const parsed = JSON.parse(entry.after_value);
-        const parentId = parsed.correspondence_id || parsed.id;
-        const rows = sqliteEngine.query<any>('SELECT confidentiality FROM correspondence WHERE id = ?', [parentId]);
-        confidentiality = rows[0]?.confidentiality || 'confidential';
+        try {
+          const parsed = JSON.parse(entry.after_value);
+          const parentId = parsed.correspondence_id || parsed.id;
+          const rows = sqliteEngine.query<any>('SELECT confidentiality FROM correspondence WHERE id = ?', [parentId]);
+          confidentiality = rows[0]?.confidentiality || 'confidential';
+        } catch {
+          confidentiality = 'confidential';
+        }
       }
     } else if (entry.entity_type === 'ATTACHMENT') {
       const attRows = sqliteEngine.query<any>('SELECT entity_id, entity_type FROM attachments WHERE id = ?', [entry.entity_id]);
@@ -204,13 +229,17 @@ export class SqliteAuditRepository implements IAuditRepository {
           confidentiality = rows[0]?.confidentiality || 'confidential';
         }
       } else if (entry.after_value) {
-        const parsed = JSON.parse(entry.after_value);
-        if (parsed.entity_type === 'correspondence') {
-          const rows = sqliteEngine.query<any>('SELECT confidentiality FROM correspondence WHERE id = ?', [parsed.entity_id]);
-          confidentiality = rows[0]?.confidentiality || 'confidential';
-        } else if (parsed.entity_type === 'meeting') {
-          const rows = sqliteEngine.query<any>('SELECT confidentiality FROM meetings WHERE id = ?', [parsed.entity_id]);
-          confidentiality = rows[0]?.confidentiality || 'confidential';
+        try {
+          const parsed = JSON.parse(entry.after_value);
+          if (parsed.entity_type === 'correspondence') {
+            const rows = sqliteEngine.query<any>('SELECT confidentiality FROM correspondence WHERE id = ?', [parsed.entity_id]);
+            confidentiality = rows[0]?.confidentiality || 'confidential';
+          } else if (parsed.entity_type === 'meeting') {
+            const rows = sqliteEngine.query<any>('SELECT confidentiality FROM meetings WHERE id = ?', [parsed.entity_id]);
+            confidentiality = rows[0]?.confidentiality || 'confidential';
+          }
+        } catch {
+          confidentiality = 'confidential';
         }
       }
     } else if (entry.entity_type === 'ROUTING') {
@@ -219,10 +248,14 @@ export class SqliteAuditRepository implements IAuditRepository {
         const rows = sqliteEngine.query<any>('SELECT confidentiality FROM correspondence WHERE id = ?', [rtRows[0].correspondence_id]);
         confidentiality = rows[0]?.confidentiality || 'confidential';
       } else if (entry.after_value) {
-        const parsed = JSON.parse(entry.after_value);
-        const parentId = parsed.correspondence_id || parsed.id;
-        const rows = sqliteEngine.query<any>('SELECT confidentiality FROM correspondence WHERE id = ?', [parentId]);
-        confidentiality = rows[0]?.confidentiality || 'confidential';
+        try {
+          const parsed = JSON.parse(entry.after_value);
+          const parentId = parsed.correspondence_id || parsed.id;
+          const rows = sqliteEngine.query<any>('SELECT confidentiality FROM correspondence WHERE id = ?', [parentId]);
+          confidentiality = rows[0]?.confidentiality || 'confidential';
+        } catch {
+          confidentiality = 'confidential';
+        }
       }
     } else if (entry.entity_type === 'DECISION') {
       const decRows = sqliteEngine.query<any>('SELECT meeting_id FROM decisions WHERE id = ?', [entry.entity_id]);
@@ -230,10 +263,14 @@ export class SqliteAuditRepository implements IAuditRepository {
         const rows = sqliteEngine.query<any>('SELECT confidentiality FROM meetings WHERE id = ?', [decRows[0].meeting_id]);
         confidentiality = rows[0]?.confidentiality || 'confidential';
       } else if (entry.after_value) {
-        const parsed = JSON.parse(entry.after_value);
-        const parentId = parsed.meeting_id || parsed.id;
-        const rows = sqliteEngine.query<any>('SELECT confidentiality FROM meetings WHERE id = ?', [parentId]);
-        confidentiality = rows[0]?.confidentiality || 'confidential';
+        try {
+          const parsed = JSON.parse(entry.after_value);
+          const parentId = parsed.meeting_id || parsed.id;
+          const rows = sqliteEngine.query<any>('SELECT confidentiality FROM meetings WHERE id = ?', [parentId]);
+          confidentiality = rows[0]?.confidentiality || 'confidential';
+        } catch {
+          confidentiality = 'confidential';
+        }
       }
     } else if (entry.entity_type === 'AGENDA_ITEM') {
       const agRows = sqliteEngine.query<any>('SELECT meeting_id FROM agenda_items WHERE id = ?', [entry.entity_id]);
@@ -241,10 +278,14 @@ export class SqliteAuditRepository implements IAuditRepository {
         const rows = sqliteEngine.query<any>('SELECT confidentiality FROM meetings WHERE id = ?', [agRows[0].meeting_id]);
         confidentiality = rows[0]?.confidentiality || 'confidential';
       } else if (entry.after_value) {
-        const parsed = JSON.parse(entry.after_value);
-        const parentId = parsed.meeting_id || parsed.id;
-        const rows = sqliteEngine.query<any>('SELECT confidentiality FROM meetings WHERE id = ?', [parentId]);
-        confidentiality = rows[0]?.confidentiality || 'confidential';
+        try {
+          const parsed = JSON.parse(entry.after_value);
+          const parentId = parsed.meeting_id || parsed.id;
+          const rows = sqliteEngine.query<any>('SELECT confidentiality FROM meetings WHERE id = ?', [parentId]);
+          confidentiality = rows[0]?.confidentiality || 'confidential';
+        } catch {
+          confidentiality = 'confidential';
+        }
       }
     } else if (entry.entity_type === 'MEETING_MINUTES') {
       const mmRows = sqliteEngine.query<any>('SELECT meeting_id FROM meeting_minutes WHERE id = ?', [entry.entity_id]);
@@ -252,10 +293,14 @@ export class SqliteAuditRepository implements IAuditRepository {
         const rows = sqliteEngine.query<any>('SELECT confidentiality FROM meetings WHERE id = ?', [mmRows[0].meeting_id]);
         confidentiality = rows[0]?.confidentiality || 'confidential';
       } else if (entry.after_value) {
-        const parsed = JSON.parse(entry.after_value);
-        const parentId = parsed.meeting_id || parsed.id;
-        const rows = sqliteEngine.query<any>('SELECT confidentiality FROM meetings WHERE id = ?', [parentId]);
-        confidentiality = rows[0]?.confidentiality || 'confidential';
+        try {
+          const parsed = JSON.parse(entry.after_value);
+          const parentId = parsed.meeting_id || parsed.id;
+          const rows = sqliteEngine.query<any>('SELECT confidentiality FROM meetings WHERE id = ?', [parentId]);
+          confidentiality = rows[0]?.confidentiality || 'confidential';
+        } catch {
+          confidentiality = 'confidential';
+        }
       }
     } else if (entry.entity_type === 'MEETING_ATTENDEE') {
       const maRows = sqliteEngine.query<any>('SELECT meeting_id FROM meeting_attendees WHERE id = ?', [entry.entity_id]);
@@ -263,12 +308,16 @@ export class SqliteAuditRepository implements IAuditRepository {
         const rows = sqliteEngine.query<any>('SELECT confidentiality FROM meetings WHERE id = ?', [maRows[0].meeting_id]);
         confidentiality = rows[0]?.confidentiality || 'confidential';
       } else if (entry.after_value) {
-        const parsed = JSON.parse(entry.after_value);
-        const parentId = parsed.meeting_id || parsed.id;
-        const rows = sqliteEngine.query<any>('SELECT confidentiality FROM meetings WHERE id = ?', [parentId]);
-        confidentiality = rows[0]?.confidentiality || 'confidential';
+        try {
+          const parsed = JSON.parse(entry.after_value);
+          const parentId = parsed.meeting_id || parsed.id;
+          const rows = sqliteEngine.query<any>('SELECT confidentiality FROM meetings WHERE id = ?', [parentId]);
+          confidentiality = rows[0]?.confidentiality || 'confidential';
+        } catch {
+          confidentiality = 'confidential';
+        }
       }
-    } else if (['AUTH', 'SESSION', 'LOGIN_FAILURE', 'USER_PASSWORD', 'LOCK_SCREEN_UNLOCK', 'CONFIG', 'BACKUP'].includes(entry.entity_type)) {
+    } else if (['CONTACT', 'INTERACTION', 'USER', 'USER_PASSWORD', 'USER_2FA_ENROLLED', 'USER_2FA_RESET', 'AUTH', 'SESSION', 'LOGIN_FAILURE', 'LOCK_SCREEN_UNLOCK', 'CONFIG', 'BACKUP', 'SETTINGS', 'NOTIFICATION'].includes(entry.entity_type)) {
       confidentiality = 'normal';
     } else {
       confidentiality = 'confidential'; // fail-closed default for unknown entity types
@@ -314,7 +363,7 @@ export class SqliteAuditRepository implements IAuditRepository {
       safeAfter = whitelistConfidentialJson(safeAfter);
     }
 
-    const entryHash = await computeAuditEntryHash({
+    const entryHash = computeAuditEntryHashSync({
       seq: nextSeq,
       id,
       timestamp,
@@ -330,35 +379,43 @@ export class SqliteAuditRepository implements IAuditRepository {
       is_confidential: isConfVal
     });
 
-    sqliteEngine.transaction(() => {
-      sqliteEngine.run(
-        'INSERT INTO audit_log (seq, id, user_id, user_name, user_role, action_type, entity_type, entity_id, before_value, after_value, timestamp, ip_address, prev_hash, entry_hash, is_confidential) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [
-          nextSeq,
-          id,
-          entry.user_id,
-          entry.user_name,
-          entry.user_role,
-          entry.action_type,
-          entry.entity_type,
-          entry.entity_id,
-          safeBefore || null,
-          safeAfter || null,
-          timestamp,
-          ip,
-          prevHash,
-          entryHash,
-          isConfVal
-        ]
-      );
+    sqliteEngine.run(
+      'INSERT INTO audit_log (seq, id, user_id, user_name, user_role, action_type, entity_type, entity_id, before_value, after_value, timestamp, ip_address, prev_hash, entry_hash, is_confidential) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        nextSeq,
+        id,
+        entry.user_id,
+        entry.user_name,
+        entry.user_role,
+        entry.action_type,
+        entry.entity_type,
+        entry.entity_id,
+        safeBefore || null,
+        safeAfter || null,
+        timestamp,
+        ip,
+        prevHash,
+        entryHash,
+        isConfVal
+      ]
+    );
 
-      sqliteEngine.run(
-        `UPDATE settings SET audit_last_seq = ?, audit_head_hash = ?, audit_count = audit_count + 1 WHERE id = 'settings-global' OR id = (SELECT id FROM settings LIMIT 1)`,
-        [nextSeq, entryHash]
-      );
+    sqliteEngine.run(
+      `UPDATE settings SET audit_last_seq = ?, audit_head_hash = ?, audit_count = audit_count + 1 WHERE id = 'settings-global' OR id = (SELECT id FROM settings LIMIT 1)`,
+      [nextSeq, entryHash]
+    );
+
+    sqliteEngine.incrementVersion(isConfVal === 1);
+
+    const inserted = sqliteEngine.query<AuditLogEntry>('SELECT * FROM audit_log WHERE id = ?', [id])[0];
+    return inserted;
+  }
+
+  async log(entry: Omit<AuditLogEntry, 'id' | 'timestamp' | 'ip_address'> & { ip_address?: string; is_confidential?: number | boolean }, ctx: UserContext): Promise<AuditLogEntry> {
+    return sqliteEngine.transaction(() => {
+      return this.writeAuditEntrySync(entry, ctx);
     });
-  });
-}
+  }
 }
 
 // --- Meeting Repository ---
@@ -423,26 +480,42 @@ export class SqliteMeetingRepository implements IMeetingRepository {
     const status = 'scheduled';
     const created_by = ctx.userId || 'مستخدم';
     const now = new Date().toISOString();
-    sqliteEngine.run(
-      'INSERT INTO meetings (id, title, location, start_time, end_time, meeting_type, status, matter_id, confidentiality, notes, created_at, updated_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [
-        id,
-        data.title,
-        data.location,
-        data.start_time,
-        data.end_time,
-        data.meeting_type,
-        status,
-        data.matter_id || null,
-        confidentiality,
-        data.notes || null,
-        now,
-        now,
-        created_by
-      ]
-    );
 
-    return (await this.getById(id, ctx))!;
+    return sqliteEngine.transaction(() => {
+      sqliteEngine.run(
+        'INSERT INTO meetings (id, title, location, start_time, end_time, meeting_type, status, matter_id, confidentiality, notes, created_at, updated_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          id,
+          data.title,
+          data.location,
+          data.start_time,
+          data.end_time,
+          data.meeting_type,
+          status,
+          data.matter_id || null,
+          confidentiality,
+          data.notes || null,
+          now,
+          now,
+          created_by
+        ]
+      );
+
+      auditRepo.writeAuditEntrySync({
+        user_id: ctx.userId || 'system',
+        user_name: (ctx as any).userName || ctx.userId || 'system',
+        user_role: ctx.role,
+        action_type: 'CREATE',
+        entity_type: 'MEETING',
+        entity_id: id,
+        before_value: null,
+        after_value: JSON.stringify({ id, title: data.title, confidentiality }),
+        is_confidential: confidentiality !== 'normal'
+      }, ctx);
+
+      const rows = sqliteEngine.query<Meeting>('SELECT * FROM meetings WHERE id = ? AND deleted_at IS NULL', [id]);
+      return rows[0];
+    });
   }
 
   async update(id: string, meeting: Partial<Meeting>, ctx: UserContext): Promise<Meeting> {
@@ -472,8 +545,25 @@ export class SqliteMeetingRepository implements IMeetingRepository {
       }
     }
     params.push(id);
-    sqliteEngine.run(`UPDATE meetings SET ${fields.join(', ')} WHERE id = ?`, params);
-    return (await this.getById(id, ctx))!;
+
+    return sqliteEngine.transaction(() => {
+      sqliteEngine.run(`UPDATE meetings SET ${fields.join(', ')} WHERE id = ?`, params);
+
+      auditRepo.writeAuditEntrySync({
+        user_id: ctx.userId || 'system',
+        user_name: (ctx as any).userName || ctx.userId || 'system',
+        user_role: ctx.role,
+        action_type: 'UPDATE',
+        entity_type: 'MEETING',
+        entity_id: id,
+        before_value: JSON.stringify({ status: existing.status }),
+        after_value: JSON.stringify(meeting),
+        is_confidential: existing.confidentiality !== 'normal'
+      }, ctx);
+
+      const rows = sqliteEngine.query<Meeting>('SELECT * FROM meetings WHERE id = ? AND deleted_at IS NULL', [id]);
+      return rows[0];
+    });
   }
 
   async softDelete(id: string, ctx: UserContext): Promise<boolean> {
@@ -487,8 +577,24 @@ export class SqliteMeetingRepository implements IMeetingRepository {
       throw err;
     }
     const now = new Date().toISOString();
-    sqliteEngine.run('UPDATE meetings SET deleted_at = ? WHERE id = ?', [now, id]);
-    return true;
+
+    return sqliteEngine.transaction(() => {
+      sqliteEngine.run('UPDATE meetings SET deleted_at = ? WHERE id = ?', [now, id]);
+
+      auditRepo.writeAuditEntrySync({
+        user_id: ctx.userId || 'system',
+        user_name: (ctx as any).userName || ctx.userId || 'system',
+        user_role: ctx.role,
+        action_type: 'DELETE',
+        entity_type: 'MEETING',
+        entity_id: id,
+        before_value: JSON.stringify({ id, title: existing.title }),
+        after_value: null,
+        is_confidential: existing.confidentiality !== 'normal'
+      }, ctx);
+
+      return true;
+    });
   }
 
   async getAttendees(meetingId: string, ctx: UserContext): Promise<MeetingAttendee[]> {
@@ -504,14 +610,28 @@ export class SqliteMeetingRepository implements IMeetingRepository {
     const parent = await this.getById(meetingId, ctx);
     if (!parent) throw new SecurityAuthorizationError('الاجتماع غير موجود أو سري');
 
-    sqliteEngine.run('DELETE FROM meeting_attendees WHERE meeting_id = ?', [meetingId]);
-    for (const a of attendees) {
-      const id = `attd-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-      sqliteEngine.run(
-        'INSERT INTO meeting_attendees (id, meeting_id, name, title, entity, is_required, attendance_status) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [id, meetingId, a.name, a.title, a.entity, (a as any).is_required ? 1 : 0, a.attendance_status || 'invited']
-      );
-    }
+    sqliteEngine.transaction(() => {
+      sqliteEngine.run('DELETE FROM meeting_attendees WHERE meeting_id = ?', [meetingId]);
+      for (const a of attendees) {
+        const id = `attd-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+        sqliteEngine.run(
+          'INSERT INTO meeting_attendees (id, meeting_id, name, title, entity, is_required, attendance_status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [id, meetingId, a.name, a.title, a.entity, (a as any).is_required ? 1 : 0, a.attendance_status || 'invited']
+        );
+      }
+
+      auditRepo.writeAuditEntrySync({
+        user_id: ctx.userId || 'system',
+        user_name: (ctx as any).userName || ctx.userId || 'system',
+        user_role: ctx.role,
+        action_type: 'UPDATE',
+        entity_type: 'MEETING_ATTENDEE',
+        entity_id: meetingId,
+        before_value: null,
+        after_value: JSON.stringify({ count: attendees.length }),
+        is_confidential: parent.confidentiality !== 'normal'
+      }, ctx);
+    });
   }
 
   async getAgenda(meetingId: string, ctx: UserContext): Promise<AgendaItem[]> {
@@ -527,14 +647,28 @@ export class SqliteMeetingRepository implements IMeetingRepository {
     const parent = await this.getById(meetingId, ctx);
     if (!parent) throw new SecurityAuthorizationError('الاجتماع غير موجود أو سري');
 
-    sqliteEngine.run('DELETE FROM agenda_items WHERE meeting_id = ?', [meetingId]);
-    for (const item of items) {
-      const id = `agenda-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-      sqliteEngine.run(
-        'INSERT INTO agenda_items (id, meeting_id, order_index, title, presenter_name, duration_minutes, is_confidential) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [id, meetingId, item.order_index, item.title, (item as any).presenter_name || item.presenter, item.duration_minutes, (item as any).is_confidential ? 1 : 0]
-      );
-    }
+    sqliteEngine.transaction(() => {
+      sqliteEngine.run('DELETE FROM agenda_items WHERE meeting_id = ?', [meetingId]);
+      for (const item of items) {
+        const id = `agenda-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+        sqliteEngine.run(
+          'INSERT INTO agenda_items (id, meeting_id, order_index, title, presenter_name, duration_minutes, is_confidential) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [id, meetingId, item.order_index, item.title, (item as any).presenter_name || item.presenter, item.duration_minutes, (item as any).is_confidential ? 1 : 0]
+        );
+      }
+
+      auditRepo.writeAuditEntrySync({
+        user_id: ctx.userId || 'system',
+        user_name: (ctx as any).userName || ctx.userId || 'system',
+        user_role: ctx.role,
+        action_type: 'UPDATE',
+        entity_type: 'AGENDA_ITEM',
+        entity_id: meetingId,
+        before_value: null,
+        after_value: JSON.stringify({ count: items.length }),
+        is_confidential: parent.confidentiality !== 'normal'
+      }, ctx);
+    });
   }
 
   async getMinutes(meetingId: string, ctx: UserContext): Promise<MeetingMinutes | null> {
@@ -556,21 +690,37 @@ export class SqliteMeetingRepository implements IMeetingRepository {
     }
 
     const existing = await this.getMinutes(minutes.meeting_id, ctx);
-    if (existing) {
-      sqliteEngine.run(
-        'UPDATE meeting_minutes SET draft_content = ?, approved_content = ?, status = ?, approved_by = ?, approved_at = ? WHERE meeting_id = ?',
-        [minutes.draft_content ?? existing.draft_content ?? null, minutes.approved_content ?? existing.approved_content ?? null, minutes.status, minutes.approved_by || null, minutes.approved_at || null, minutes.meeting_id]
-      );
-      return (await this.getMinutes(minutes.meeting_id, ctx))!;
-    } else {
-      const id = `min-${Date.now()}`;
-      const draftContent = minutes.draft_content ?? '';
-      sqliteEngine.run(
-        'INSERT INTO meeting_minutes (id, meeting_id, draft_content, approved_content, status, approved_by, approved_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [id, minutes.meeting_id, draftContent, minutes.approved_content || null, minutes.status || 'draft', minutes.approved_by || null, minutes.approved_at || null]
-      );
-      return (await this.getMinutes(minutes.meeting_id, ctx))!;
-    }
+
+    return sqliteEngine.transaction(() => {
+      if (existing) {
+        sqliteEngine.run(
+          'UPDATE meeting_minutes SET draft_content = ?, approved_content = ?, status = ?, approved_by = ?, approved_at = ? WHERE meeting_id = ?',
+          [minutes.draft_content ?? existing.draft_content ?? null, minutes.approved_content ?? existing.approved_content ?? null, minutes.status, minutes.approved_by || null, minutes.approved_at || null, minutes.meeting_id]
+        );
+      } else {
+        const id = `min-${Date.now()}`;
+        const draftContent = minutes.draft_content ?? '';
+        sqliteEngine.run(
+          'INSERT INTO meeting_minutes (id, meeting_id, draft_content, approved_content, status, approved_by, approved_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [id, minutes.meeting_id, draftContent, minutes.approved_content || null, minutes.status || 'draft', minutes.approved_by || null, minutes.approved_at || null]
+        );
+      }
+
+      auditRepo.writeAuditEntrySync({
+        user_id: ctx.userId || 'system',
+        user_name: (ctx as any).userName || ctx.userId || 'system',
+        user_role: ctx.role,
+        action_type: minutes.status === 'approved' ? 'APPROVE' : 'UPDATE',
+        entity_type: 'MEETING_MINUTES',
+        entity_id: minutes.meeting_id,
+        before_value: existing ? JSON.stringify({ status: existing.status }) : null,
+        after_value: JSON.stringify({ status: minutes.status }),
+        is_confidential: parent.confidentiality !== 'normal'
+      }, ctx);
+
+      const rows = sqliteEngine.query<MeetingMinutes>('SELECT * FROM meeting_minutes WHERE meeting_id = ?', [minutes.meeting_id]);
+      return rows[0];
+    });
   }
 
   async getDecisions(meetingId: string, ctx: UserContext): Promise<Decision[]> {
@@ -593,12 +743,27 @@ export class SqliteMeetingRepository implements IMeetingRepository {
     const dueDate = decision.due_date || new Date().toISOString().split('T')[0];
     const status = decision.status || 'pending';
 
-    sqliteEngine.run(
-      'INSERT INTO decisions (id, meeting_id, order_index, content, assigned_department_id, assigned_to_name, due_date, directive_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, decision.meeting_id, orderIndex, content, decision.assigned_department_id || null, assignedToName, dueDate, decision.directive_id || null, status]
-    );
-    const rows = sqliteEngine.query<Decision>('SELECT * FROM decisions WHERE id = ?', [id]);
-    return rows[0];
+    return sqliteEngine.transaction(() => {
+      sqliteEngine.run(
+        'INSERT INTO decisions (id, meeting_id, order_index, content, assigned_department_id, assigned_to_name, due_date, directive_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, decision.meeting_id, orderIndex, content, decision.assigned_department_id || null, assignedToName, dueDate, decision.directive_id || null, status]
+      );
+
+      auditRepo.writeAuditEntrySync({
+        user_id: ctx.userId || 'system',
+        user_name: (ctx as any).userName || ctx.userId || 'system',
+        user_role: ctx.role,
+        action_type: 'CREATE',
+        entity_type: 'DECISION',
+        entity_id: id,
+        before_value: null,
+        after_value: JSON.stringify({ id, meeting_id: decision.meeting_id, content }),
+        is_confidential: parent.confidentiality !== 'normal'
+      }, ctx);
+
+      const rows = sqliteEngine.query<Decision>('SELECT * FROM decisions WHERE id = ?', [id]);
+      return rows[0];
+    });
   }
 }
 
@@ -723,29 +888,45 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
     const status = 'registered';
     const created_by = ctx.userId || 'مستخدم';
     const now = new Date().toISOString();
-    sqliteEngine.run(
-      'INSERT INTO correspondence (id, serial_number, type, date, source_or_dest_entity, subject, priority, confidentiality, summary, status, matter_id, category, tags, created_at, updated_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [
-        id,
-        serial_number,
-        data.type,
-        data.date,
-        data.source_or_dest_entity,
-        data.subject,
-        data.priority,
-        confidentiality,
-        data.summary ?? '',
-        status,
-        data.matter_id || null,
-        data.category || 'operations',
-        JSON.stringify(data.tags || []),
-        now,
-        now,
-        created_by
-      ]
-    );
 
-    return (await this.getById(id, ctx))!;
+    return sqliteEngine.transaction(() => {
+      sqliteEngine.run(
+        'INSERT INTO correspondence (id, serial_number, type, date, source_or_dest_entity, subject, priority, confidentiality, summary, status, matter_id, category, tags, created_at, updated_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          id,
+          serial_number,
+          data.type,
+          data.date,
+          data.source_or_dest_entity,
+          data.subject,
+          data.priority,
+          confidentiality,
+          data.summary ?? '',
+          status,
+          data.matter_id || null,
+          data.category || 'operations',
+          JSON.stringify(data.tags || []),
+          now,
+          now,
+          created_by
+        ]
+      );
+
+      auditRepo.writeAuditEntrySync({
+        user_id: ctx.userId || 'system',
+        user_name: (ctx as any).userName || ctx.userId || 'system',
+        user_role: ctx.role,
+        action_type: 'CREATE',
+        entity_type: 'CORRESPONDENCE',
+        entity_id: id,
+        before_value: null,
+        after_value: JSON.stringify({ serial_number, type: data.type, subject: data.subject, confidentiality }),
+        is_confidential: confidentiality !== 'normal'
+      }, ctx);
+
+      const rows = sqliteEngine.query<any>('SELECT * FROM correspondence WHERE id = ? AND deleted_at IS NULL', [id]);
+      return mapCorrespondenceRow(rows[0]);
+    });
   }
 
   async update(id: string, item: Partial<Correspondence>, ctx: UserContext): Promise<Correspondence> {
@@ -779,8 +960,25 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
       }
     }
     params.push(id);
-    sqliteEngine.run(`UPDATE correspondence SET ${fields.join(', ')} WHERE id = ?`, params);
-    return (await this.getById(id, ctx))!;
+
+    return sqliteEngine.transaction(() => {
+      sqliteEngine.run(`UPDATE correspondence SET ${fields.join(', ')} WHERE id = ?`, params);
+
+      auditRepo.writeAuditEntrySync({
+        user_id: ctx.userId || 'system',
+        user_name: (ctx as any).userName || ctx.userId || 'system',
+        user_role: ctx.role,
+        action_type: 'UPDATE',
+        entity_type: 'CORRESPONDENCE',
+        entity_id: id,
+        before_value: JSON.stringify({ status: existing.status }),
+        after_value: JSON.stringify(item),
+        is_confidential: existing.confidentiality !== 'normal'
+      }, ctx);
+
+      const rows = sqliteEngine.query<any>('SELECT * FROM correspondence WHERE id = ? AND deleted_at IS NULL', [id]);
+      return mapCorrespondenceRow(rows[0]);
+    });
   }
 
   async softDelete(id: string, ctx: UserContext): Promise<boolean> {
@@ -794,8 +992,24 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
       throw err;
     }
     const now = new Date().toISOString();
-    sqliteEngine.run('UPDATE correspondence SET deleted_at = ? WHERE id = ?', [now, id]);
-    return true;
+
+    return sqliteEngine.transaction(() => {
+      sqliteEngine.run('UPDATE correspondence SET deleted_at = ? WHERE id = ?', [now, id]);
+
+      auditRepo.writeAuditEntrySync({
+        user_id: ctx.userId || 'system',
+        user_name: (ctx as any).userName || ctx.userId || 'system',
+        user_role: ctx.role,
+        action_type: 'DELETE',
+        entity_type: 'CORRESPONDENCE',
+        entity_id: id,
+        before_value: JSON.stringify({ id, serial_number: existing.serial_number }),
+        after_value: null,
+        is_confidential: existing.confidentiality !== 'normal'
+      }, ctx);
+
+      return true;
+    });
   }
 
   async submit(id: string, comment: string | undefined, ctx: UserContext): Promise<Correspondence> {
@@ -814,8 +1028,25 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
       throw err;
     }
     const now = new Date().toISOString();
-    sqliteEngine.run('UPDATE correspondence SET status = ?, updated_at = ? WHERE id = ?', ['submitted', now, id]);
-    return (await this.getById(id, ctx))!;
+
+    return sqliteEngine.transaction(() => {
+      sqliteEngine.run('UPDATE correspondence SET status = ?, updated_at = ? WHERE id = ?', ['submitted', now, id]);
+
+      auditRepo.writeAuditEntrySync({
+        user_id: ctx.userId || 'system',
+        user_name: (ctx as any).userName || ctx.userId || 'system',
+        user_role: ctx.role,
+        action_type: 'UPDATE',
+        entity_type: 'CORRESPONDENCE',
+        entity_id: id,
+        before_value: JSON.stringify({ status: existing.status }),
+        after_value: JSON.stringify({ status: 'submitted', comment }),
+        is_confidential: existing.confidentiality !== 'normal'
+      }, ctx);
+
+      const rows = sqliteEngine.query<any>('SELECT * FROM correspondence WHERE id = ? AND deleted_at IS NULL', [id]);
+      return mapCorrespondenceRow(rows[0]);
+    });
   }
 
   async reclassify(id: string, confidentiality: ConfidentialityLevel, reason: string | undefined, ctx: UserContext): Promise<Correspondence> {
@@ -829,8 +1060,25 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
       throw err;
     }
     const now = new Date().toISOString();
-    sqliteEngine.run('UPDATE correspondence SET confidentiality = ?, updated_at = ? WHERE id = ?', [confidentiality, now, id]);
-    return (await this.getById(id, ctx))!;
+
+    return sqliteEngine.transaction(() => {
+      sqliteEngine.run('UPDATE correspondence SET confidentiality = ?, updated_at = ? WHERE id = ?', [confidentiality, now, id]);
+
+      auditRepo.writeAuditEntrySync({
+        user_id: ctx.userId || 'system',
+        user_name: (ctx as any).userName || ctx.userId || 'system',
+        user_role: ctx.role,
+        action_type: 'UPDATE',
+        entity_type: 'CORRESPONDENCE',
+        entity_id: id,
+        before_value: JSON.stringify({ confidentiality: existing.confidentiality }),
+        after_value: JSON.stringify({ confidentiality, reason }),
+        is_confidential: confidentiality !== 'normal'
+      }, ctx);
+
+      const rows = sqliteEngine.query<any>('SELECT * FROM correspondence WHERE id = ? AND deleted_at IS NULL', [id]);
+      return mapCorrespondenceRow(rows[0]);
+    });
   }
 
   async getBriefingNote(correspondenceId: string, ctx: UserContext): Promise<BriefingNote | null> {
@@ -854,19 +1102,35 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
     const prepared_by_name = note.prepared_by_name || ctx.userId || 'مستخدم النظام';
     const prepared_at = note.prepared_at || new Date().toISOString();
 
-    if (existing) {
-      sqliteEngine.run(
-        'UPDATE briefing_notes SET background = ?, secretary_recommendation = ?, executive_opinion = ?, prepared_by_name = ?, prepared_at = ? WHERE correspondence_id = ?',
-        [background, secretary_recommendation, executive_opinion, prepared_by_name, prepared_at, note.correspondence_id]
-      );
-    } else {
-      const id = `brief-${Date.now()}`;
-      sqliteEngine.run(
-        'INSERT INTO briefing_notes (id, correspondence_id, background, secretary_recommendation, executive_opinion, prepared_by_name, prepared_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [id, note.correspondence_id, background, secretary_recommendation, executive_opinion, prepared_by_name, prepared_at]
-      );
-    }
-    return (await this.getBriefingNote(note.correspondence_id, ctx))!;
+    return sqliteEngine.transaction(() => {
+      if (existing) {
+        sqliteEngine.run(
+          'UPDATE briefing_notes SET background = ?, secretary_recommendation = ?, executive_opinion = ?, prepared_by_name = ?, prepared_at = ? WHERE correspondence_id = ?',
+          [background, secretary_recommendation, executive_opinion, prepared_by_name, prepared_at, note.correspondence_id]
+        );
+      } else {
+        const id = `brief-${Date.now()}`;
+        sqliteEngine.run(
+          'INSERT INTO briefing_notes (id, correspondence_id, background, secretary_recommendation, executive_opinion, prepared_by_name, prepared_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [id, note.correspondence_id, background, secretary_recommendation, executive_opinion, prepared_by_name, prepared_at]
+        );
+      }
+
+      auditRepo.writeAuditEntrySync({
+        user_id: ctx.userId || 'system',
+        user_name: (ctx as any).userName || ctx.userId || 'system',
+        user_role: ctx.role,
+        action_type: 'UPDATE',
+        entity_type: 'BRIEFING_NOTE',
+        entity_id: note.correspondence_id,
+        before_value: null,
+        after_value: JSON.stringify({ correspondence_id: note.correspondence_id }),
+        is_confidential: parent.confidentiality !== 'normal'
+      }, ctx);
+
+      const rows = sqliteEngine.query<BriefingNote>('SELECT * FROM briefing_notes WHERE correspondence_id = ?', [note.correspondence_id]);
+      return rows[0];
+    });
   }
 
   async getApproval(correspondenceId: string, ctx: UserContext): Promise<Approval | null> {
@@ -889,11 +1153,29 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
     const decided_at = approval.decided_at || new Date().toISOString();
     const decided_by_name = approval.decided_by_name || ctx.userId || 'رئيس مجلس الإدارة';
 
-    sqliteEngine.run(
-      'INSERT INTO approvals (id, correspondence_id, decision_type, standard_phrase, custom_directive, decided_at, decided_by_name) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [id, approval.correspondence_id, decision_type, standard_phrase, approval.custom_directive || null, decided_at, decided_by_name]
-    );
-    return (await this.getApproval(approval.correspondence_id, ctx))!;
+    return sqliteEngine.transaction(() => {
+      sqliteEngine.run(
+        'INSERT INTO approvals (id, correspondence_id, decision_type, standard_phrase, custom_directive, decided_at, decided_by_name) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [id, approval.correspondence_id, decision_type, standard_phrase, approval.custom_directive || null, decided_at, decided_by_name]
+      );
+      const now = new Date().toISOString();
+      sqliteEngine.run('UPDATE correspondence SET status = ?, updated_at = ? WHERE id = ?', ['approved', now, approval.correspondence_id]);
+
+      auditRepo.writeAuditEntrySync({
+        user_id: ctx.userId || 'system',
+        user_name: (ctx as any).userName || ctx.userId || 'system',
+        user_role: ctx.role,
+        action_type: 'APPROVE',
+        entity_type: 'APPROVAL',
+        entity_id: id,
+        before_value: null,
+        after_value: JSON.stringify({ id, correspondence_id: approval.correspondence_id, decision_type }),
+        is_confidential: parent.confidentiality !== 'normal'
+      }, ctx);
+
+      const rows = sqliteEngine.query<Approval>('SELECT * FROM approvals WHERE correspondence_id = ?', [approval.correspondence_id]);
+      return rows[0];
+    });
   }
 
   async getRoutings(correspondenceId: string, ctx: UserContext): Promise<CorrespondenceRouting[]> {
@@ -917,12 +1199,27 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
     const status = routing.status || 'sent';
     const routed_at = routing.routed_at || new Date().toISOString();
 
-    sqliteEngine.run(
-      'INSERT INTO correspondence_routing (id, correspondence_id, from_entity, to_department_id, to_department_name, action_required, deadline, status, routed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, routing.correspondence_id, routing.from_entity, to_department_id, to_department_name, action_required, deadline, status, routed_at]
-    );
-    const rows = sqliteEngine.query<CorrespondenceRouting>('SELECT * FROM correspondence_routing WHERE id = ?', [id]);
-    return rows[0];
+    return sqliteEngine.transaction(() => {
+      sqliteEngine.run(
+        'INSERT INTO correspondence_routing (id, correspondence_id, from_entity, to_department_id, to_department_name, action_required, deadline, status, routed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, routing.correspondence_id, routing.from_entity, to_department_id, to_department_name, action_required, deadline, status, routed_at]
+      );
+
+      auditRepo.writeAuditEntrySync({
+        user_id: ctx.userId || 'system',
+        user_name: (ctx as any).userName || ctx.userId || 'system',
+        user_role: ctx.role,
+        action_type: 'CREATE',
+        entity_type: 'ROUTING',
+        entity_id: id,
+        before_value: null,
+        after_value: JSON.stringify({ id, correspondence_id: routing.correspondence_id }),
+        is_confidential: parent.confidentiality !== 'normal'
+      }, ctx);
+
+      const rows = sqliteEngine.query<CorrespondenceRouting>('SELECT * FROM correspondence_routing WHERE id = ?', [id]);
+      return rows[0];
+    });
   }
 
   async getAttachments(correspondenceId: string, ctx: UserContext): Promise<Attachment[]> {
@@ -956,12 +1253,27 @@ export class SqliteCorrespondenceRepository implements ICorrespondenceRepository
     const confidentiality = att.confidentiality || 'normal';
     const uploadedAt = att.uploaded_at || new Date().toISOString();
 
-    sqliteEngine.run(
-      'INSERT INTO attachments (id, entity_type, entity_id, file_name, file_size_kb, mime_type, confidentiality, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, entityType, entityId, fileName, fileSizeKb, mimeType, confidentiality, uploadedAt]
-    );
-    const rows = sqliteEngine.query<Attachment>('SELECT * FROM attachments WHERE id = ?', [id]);
-    return rows[0];
+    return sqliteEngine.transaction(() => {
+      sqliteEngine.run(
+        'INSERT INTO attachments (id, entity_type, entity_id, file_name, file_size_kb, mime_type, confidentiality, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, entityType, entityId, fileName, fileSizeKb, mimeType, confidentiality, uploadedAt]
+      );
+
+      auditRepo.writeAuditEntrySync({
+        user_id: ctx.userId || 'system',
+        user_name: (ctx as any).userName || ctx.userId || 'system',
+        user_role: ctx.role,
+        action_type: 'CREATE',
+        entity_type: 'ATTACHMENT',
+        entity_id: id,
+        before_value: null,
+        after_value: JSON.stringify({ id, entity_type: entityType, entity_id: entityId, file_name: fileName }),
+        is_confidential: confidentiality !== 'normal'
+      }, ctx);
+
+      const rows = sqliteEngine.query<Attachment>('SELECT * FROM attachments WHERE id = ?', [id]);
+      return rows[0];
+    });
   }
 }
 

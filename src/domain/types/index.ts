@@ -251,7 +251,7 @@ export interface Notification {
   created_at: string;
 }
 
-export type ActionType = 'CREATE' | 'UPDATE' | 'DELETE' | 'DECIDE' | 'ROUTING' | 'EXPORT' | 'AUTH';
+export type ActionType = 'CREATE' | 'UPDATE' | 'DELETE' | 'DECIDE' | 'ROUTING' | 'EXPORT' | 'AUTH' | 'APPROVE';
 
 export interface AuditLogEntry {
   seq?: number;

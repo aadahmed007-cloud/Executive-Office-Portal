@@ -58,6 +58,30 @@ export function buildAuditPayload(entry: {
   ].join('||');
 }
 
+import nodeCrypto from 'node:crypto';
+
+/**
+ * Computes SHA-256 hash synchronously using node:crypto for an audit log entry chained to prev_hash.
+ */
+export function computeAuditEntryHashSync(entry: {
+  seq?: number;
+  id: string;
+  timestamp: string;
+  user_id: string;
+  user_role: string;
+  action_type: string;
+  entity_type: string;
+  entity_id: string;
+  before_value?: string | null;
+  after_value?: string | null;
+  ip_address?: string | null;
+  prev_hash?: string | null;
+  is_confidential?: number | boolean;
+}): string {
+  const payload = buildAuditPayload(entry);
+  return nodeCrypto.createHash('sha256').update(payload).digest('hex');
+}
+
 /**
  * Computes SHA-256 hash for an audit log entry chained to prev_hash.
  */
@@ -76,8 +100,7 @@ export async function computeAuditEntryHash(entry: {
   prev_hash?: string | null;
   is_confidential?: number | boolean;
 }): Promise<string> {
-  const payload = buildAuditPayload(entry);
-  return sha256Hex(payload);
+  return computeAuditEntryHashSync(entry);
 }
 
 export const GENESIS_BLOCK_HASH = 'GENESIS-BLOCK-00000000000000000000000000000000';

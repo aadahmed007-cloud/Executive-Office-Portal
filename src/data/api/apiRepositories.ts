@@ -366,8 +366,8 @@ export class ApiAuditRepository implements IAuditRepository {
     return apiRequest<AuditLogEntry[]>(`/api/audit${query ? `?${query}` : ''}`);
   }
 
-  async log(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>, ctx: UserContext): Promise<void> {
-    return apiRequest<void>('/api/audit', { method: 'POST', body: entry });
+  async log(entry: Omit<AuditLogEntry, 'id' | 'timestamp'> & { ip_address?: string; is_confidential?: number | boolean }, ctx: UserContext): Promise<AuditLogEntry | void> {
+    return apiRequest<AuditLogEntry>('/api/audit', { method: 'POST', body: entry });
   }
 }
 

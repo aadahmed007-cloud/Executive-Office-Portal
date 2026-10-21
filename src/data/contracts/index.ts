@@ -116,7 +116,7 @@ export interface INotificationRepository {
 
 export interface IAuditRepository {
   getAll(filter: AuditFilter | undefined, ctx: UserContext): Promise<AuditLogEntry[]>;
-  log(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>, ctx: UserContext): Promise<void>;
+  log(entry: Omit<AuditLogEntry, 'id' | 'timestamp'> & { ip_address?: string; is_confidential?: number | boolean }, ctx: UserContext): Promise<AuditLogEntry | void>;
 }
 
 export interface IUserRepository {

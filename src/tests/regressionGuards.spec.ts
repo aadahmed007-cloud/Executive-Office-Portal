@@ -340,4 +340,57 @@ describe('Phase 3: Regression Guard Tests', () => {
       expect(violations).toEqual([]);
     });
   });
+
+  // P3-8: Metadata & Gemini & Single Audit Insert Guards
+  describe('Metadata, Gemini references, and single audit insert guards', () => {
+    it('fails if metadata.json exists', () => {
+      const metaPath = path.join(rootDir, 'metadata.json');
+      expect(fs.existsSync(metaPath)).toBe(false);
+    });
+
+    it('fails if any file in workspace references GEMINI', () => {
+      function scanDir(dir: string) {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist' || entry.name === 'dist-server' || entry.name === 'regressionGuards.spec.ts') continue;
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            scanDir(full);
+          } else if (entry.isFile()) {
+            const content = fs.readFileSync(full, 'utf8');
+            if (/GEMINI/i.test(content)) {
+              throw new Error(`Found GEMINI reference in file: ${full}`);
+            }
+          }
+        }
+      }
+      scanDir(rootDir);
+    });
+
+    it('asserts that only one INSERT INTO audit_log exists in src (excluding tests)', () => {
+      function getSrcFiles(dir: string): string[] {
+        let results: string[] = [];
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            results = results.concat(getSrcFiles(full));
+          } else if (entry.isFile() && !full.includes('.spec.')) {
+            results.push(full);
+          }
+        }
+        return results;
+      }
+
+      const srcFiles = getSrcFiles(path.join(rootDir, 'src'));
+      let auditInsertCount = 0;
+      for (const file of srcFiles) {
+        const content = fs.readFileSync(file, 'utf8');
+        const matches = content.match(/INSERT\s+INTO\s+audit_log/gi);
+        if (matches) {
+          auditInsertCount += matches.length;
+        }
+      }
+      expect(auditInsertCount).toBe(1);
+    });
+  });
 });
+
